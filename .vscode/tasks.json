@@ -1,0 +1,19 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "shell",
+      "command": "bash",
+      "problemMatcher": ["$rustc"],
+      "label": "run",
+      "args": ["${workspaceFolder}/run.sh"]
+    },
+    {
+      "type": "shell",
+      "command": "bash",
+      "problemMatcher": ["$rustc"],
+      "label": "run release",
+      "args": ["${workspaceFolder}/run.sh", "--release"]
+    }
+  ]
+}
