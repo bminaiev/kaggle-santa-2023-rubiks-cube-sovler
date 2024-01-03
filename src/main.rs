@@ -1,6 +1,7 @@
 use std::{
     cmp::Reverse,
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{hash_map::DefaultHasher, BTreeMap, BinaryHeap, HashMap, HashSet},
+    hash::{Hash, Hasher},
     time::Instant,
 };
 
@@ -134,6 +135,17 @@ struct Puzzle {
     initial_state: Vec<usize>,
     num_wildcards: usize,
     num_colors: usize,
+    color_names: Vec<String>,
+}
+
+impl Puzzle {
+    pub fn convert_state(&self, state: &[usize]) -> String {
+        state
+            .iter()
+            .map(|x| self.color_names[*x].clone())
+            .collect::<Vec<_>>()
+            .join(";")
+    }
 }
 
 fn conv_colors(a: &[String], hm: &mut HashMap<String, usize>) -> Vec<usize> {
@@ -164,6 +176,10 @@ fn load_puzzles() -> Vec<Puzzle> {
         let mut colors = HashMap::new();
         let solution_state = conv_colors(&solution_state, &mut colors);
         let initial_state = conv_colors(&initial_state, &mut colors);
+        let mut color_names = vec![String::new(); colors.len()];
+        for (k, v) in colors.iter() {
+            color_names[*v] = k.clone();
+        }
 
         puzzles.push(Puzzle {
             id,
@@ -172,6 +188,7 @@ fn load_puzzles() -> Vec<Puzzle> {
             initial_state,
             num_wildcards,
             num_colors: colors.len(),
+            color_names,
         });
     }
 
@@ -212,6 +229,73 @@ fn check_solution(task: &Puzzle, solution: &[String], puzzle_info: &BTreeMap<Str
         }
     }
     println!("{}: {}/{} fails", task.id, cnt_fails, task.num_wildcards);
+}
+
+fn calc_hash(a: &[usize]) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    a.hash(&mut hasher);
+    hasher.finish()
+}
+
+fn check_solution3(task: &Puzzle, solution: &[String], puzzle_info: &BTreeMap<String, PuzzleType>) {
+    let mut state = task.initial_state.clone();
+    let puzzle_info = &puzzle_info[&task.puzzle_type];
+    let mut seen = HashMap::<u64, usize>::new();
+    let mut saved = 0;
+    let mut oks = vec![];
+    let every = solution.len() / 100 + 1;
+    for (step_it, step) in solution.iter().enumerate() {
+        let perm = &puzzle_info.moves[step];
+        for cycle in perm.cycles.iter() {
+            for w in cycle.windows(2) {
+                state.swap(w[0], w[1]);
+            }
+        }
+        if step_it % every == 0 || step_it + 100 > solution.len() {
+            let cnt_ok = state
+                .iter()
+                .zip(task.solution_state.iter())
+                .filter(|(a, b)| a == b)
+                .count();
+            oks.push(cnt_ok);
+        }
+    }
+
+    let sz = puzzle_info.moves.len();
+    let mut moves_ids = HashMap::new();
+    let mut move_names = vec![];
+    for (pos, k) in puzzle_info.moves.keys().enumerate() {
+        moves_ids.insert(k, pos);
+        move_names.push(k);
+    }
+    if sz < 50 {
+        // let mut next = vec![vec![0; sz]; sz];
+        // for w in solution.windows(2) {
+        //     let mv1 = moves_ids[&w[0]];
+        //     let mv2 = moves_ids[&w[1]];
+        //     next[mv1][mv2] += 1;
+        // }
+        // for i in 0..next.len() {
+        //     print!("{:4} ", move_names[i]);
+        //     for j in 0..next.len() {
+        //         print!("{:3} ", next[i][j]);
+        //     }
+        //     println!();
+        // }
+        // println!();
+    }
+
+    let mut cnt_fails = 0;
+    for i in 0..state.len() {
+        if state[i] != task.solution_state[i] {
+            cnt_fails += 1;
+        }
+    }
+    println!(
+        "{}: {}/{} fails. Saved: {saved}",
+        task.id, cnt_fails, task.num_wildcards
+    );
+    println!("OKs: {:?}", oks);
 }
 
 fn check_solution2(task: &Puzzle, solution: &[String], puzzle_info: &BTreeMap<String, PuzzleType>) {
@@ -264,7 +348,7 @@ fn show_info(data: &Data) {
     sorted_test_ids.reverse();
 
     let mut sum_lens = 0;
-    for puzzle_id in sorted_test_ids[..10].iter() {
+    for puzzle_id in sorted_test_ids[..].iter() {
         let puzzle = &puzzles[*puzzle_id];
         let sol = &solutions[&puzzle.id];
         println!(
@@ -276,7 +360,7 @@ fn show_info(data: &Data) {
             puzzle.num_colors
         );
         sum_lens += sol.len();
-        check_solution2(puzzle, sol, &puzzle_info);
+        check_solution3(puzzle, sol, &puzzle_info);
     }
     println!("Total len: {}", sum_lens);
 }
@@ -292,6 +376,7 @@ fn rev(s: &str) -> String {
 fn analyze_puzzle_type(data: &Data, puzzle_type: &str) {
     let puzzle_info = &data.puzzle_info[puzzle_type];
     eprintln!("N = {}. Moves = {}", puzzle_info.n, puzzle_info.moves.len());
+
     // for mov in puzzle_info.moves.values() {
     //     eprint!("{}: ", mov.cycles.len());
     //     for cycle in mov.cycles.iter() {
@@ -349,63 +434,199 @@ fn analyze_puzzle_type(data: &Data, puzzle_type: &str) {
                 task.num_colors
             );
             // check_solution(tasks, sol, &data.puzzle_info);
-            new_solve(task, queue.clone());
+            new_solve(task, queue.clone(), &data.puzzle_info);
             break;
         }
     }
 }
 
-fn new_solve(task: &Puzzle, mut queue: Vec<Permutation>) {
-    let mut state = task.initial_state.clone();
-    let calc_score = |s: &[usize]| {
-        let t = &task.solution_state;
-        let mut cnt = 0;
-        for i in 0..s.len() {
-            if s[i] != t[i] {
-                cnt += 1;
-            }
-        }
-        cnt as f64
-    };
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum CellType {
+    Central,
+    Mid,
+    Corner,
+}
 
-    let mut rng = rand::thread_rng();
-    const MAX_SEC: f64 = 10.0;
-    let temp_start = 10.0f64;
-    let temp_end = 0.1f64;
-    let start = Instant::now();
-    let mut prev_score = calc_score(&state);
-    let mut zz = 0;
-    let mut min_score = f64::MAX;
-    loop {
-        zz += 1;
-        if prev_score < min_score {
-            min_score = prev_score;
-            eprintln!("{:?}: {}", start.elapsed(), min_score);
-        }
-        let elapsed_s = start.elapsed().as_secs_f64();
-        if elapsed_s > MAX_SEC {
-            break;
-        }
-        let elapsed_frac = elapsed_s / MAX_SEC;
-        let temp = temp_start * (temp_end / temp_start).powf(elapsed_frac);
-        let m_id = rng.gen_range(0..queue.len());
-        let m = &queue[m_id];
+#[derive(Clone, Debug)]
+struct Block {
+    cells: Vec<usize>,
+    score: usize,
+}
 
-        let mut new_state = state.clone();
-        m.apply(&mut new_state);
-
-        let new_score = calc_score(&new_state);
-        if new_score < prev_score || fastrand::f64() < ((prev_score - new_score) / temp).exp() {
-            // Using a new state!
-            prev_score = new_score;
-            state = new_state;
-        } else {
-            // Rollback
-            // perm[fr..to].reverse();
+impl Block {
+    pub fn new(cells: &[usize], score: usize) -> Self {
+        Self {
+            cells: cells.to_vec(),
+            score,
         }
     }
-    let score = calc_score(&state);
-    eprintln!("Score: {score}");
+}
+
+fn new_solve(
+    task: &Puzzle,
+    mut queue: Vec<Permutation>,
+    puzzle_info: &BTreeMap<String, PuzzleType>,
+) {
+    let mut state = task.initial_state.clone();
+    println!("TASK ID: {}", task.id);
+    println!("START: {}", task.convert_state(&task.solution_state));
+
+    let puzzle_info = &puzzle_info[&task.puzzle_type];
+    let mut cnt_used = vec![0; puzzle_info.n];
+    for mov in puzzle_info.moves.values() {
+        eprintln!("MOVE: {:?}", mov.cycles);
+        for cycle in mov.cycles.iter() {
+            for &x in cycle.iter() {
+                cnt_used[x] += 1;
+            }
+        }
+    }
+    println!("Used: {:?}", cnt_used);
+    let mut types = vec![CellType::Corner; state.len()];
+    for i in 0..types.len() {
+        if cnt_used[i] == 4 {
+            types[i] = CellType::Central;
+            for mov in puzzle_info.moves.values() {
+                let mut contains = false;
+                for cycle in mov.cycles.iter() {
+                    if cycle.contains(&i) {
+                        contains = true;
+                        break;
+                    }
+                }
+                if contains {
+                    for cycle in mov.cycles.iter() {
+                        for &x in cycle.iter() {
+                            if types[x] == CellType::Corner {
+                                types[x] = CellType::Mid;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let mut cnt_mid = 0;
+    let mut cnt_corners = 0;
+    let mut cnt_central = 0;
+    for i in 0..types.len() {
+        println!("{}: {:?}", i, types[i]);
+        match types[i] {
+            CellType::Central => cnt_central += 1,
+            CellType::Mid => cnt_mid += 1,
+            CellType::Corner => cnt_corners += 1,
+        }
+    }
+    println!("Types: {} {} {}", cnt_central, cnt_mid, cnt_corners);
+
+    let mut rng = rand::thread_rng();
+
+    let mut blocks = vec![];
+    let mut magic = vec![0; state.len()];
+    for mov in puzzle_info.moves.values() {
+        let xor: u64 = rng.gen();
+        for cycle in mov.cycles.iter() {
+            for &x in cycle.iter() {
+                magic[x] ^= xor;
+            }
+        }
+    }
+    let mut seen = vec![false; state.len()];
+    for i in 0..magic.len() {
+        if seen[i] {
+            continue;
+        }
+        let mut group = vec![];
+        for j in 0..magic.len() {
+            if magic[j] == magic[i] {
+                group.push(j);
+                seen[j] = true;
+            }
+        }
+        let mut score = 0;
+        if group.len() == 3 {
+            score = 1;
+        } else if group.len() == 2 && types[group[0]] == CellType::Mid {
+            score = 100;
+        } else {
+            assert_eq!(types[group[0]], CellType::Central);
+            score = 1000;
+        }
+        blocks.push(Block::new(&group, score));
+    }
+
+    for b in blocks.iter() {
+        println!("Block: {:?}", b);
+    }
+
+    let calc_score = |s: &[usize]| {
+        let t = &task.solution_state;
+        let mut res = 0;
+        for block in blocks.iter() {
+            let mut ok = true;
+            for &x in block.cells.iter() {
+                if s[x] != t[x] {
+                    ok = false;
+                }
+            }
+            if !ok {
+                res += block.score;
+            }
+        }
+        res
+    };
+
+    let mut heap = BinaryHeap::new();
+    let start_state = State {
+        priority: 0,
+        score: calc_score(&state),
+        len: 0,
+        state: state.clone(),
+    };
+    heap.push(Reverse(start_state));
+    let mut seen = HashMap::new();
+    seen.insert(state, 0);
+    let mut smallest_score = usize::MAX;
+    while let Some(Reverse(state)) = heap.pop() {
+        if state.score < smallest_score {
+            smallest_score = state.score;
+            eprintln!(
+                "Len={}, score={}, state={}",
+                state.len,
+                state.score,
+                task.convert_state(&state.state)
+            );
+        }
+        if state.score == 0 {
+            println!("SOLVED!");
+            break;
+        }
+        for mov in queue.iter() {
+            let mut new_state = state.state.clone();
+            mov.apply(&mut new_state);
+            let new_score = calc_score(&new_state);
+            let new_len = state.len + 1;
+            let new_state = State {
+                priority: new_score + new_len * 30,
+                score: new_score,
+                len: new_len,
+                state: new_state,
+            };
+            if !seen.contains_key(&new_state.state) || seen[&new_state.state] > new_len {
+                seen.insert(new_state.state.clone(), new_len);
+                heap.push(Reverse(new_state));
+            }
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct State {
+    priority: usize,
+    score: usize,
+    len: usize,
+    state: Vec<usize>,
 }
 
 fn main() {
@@ -413,7 +634,7 @@ fn main() {
 
     let data = load_data();
 
-    analyze_puzzle_type(&data, "globe_2/6");
+    analyze_puzzle_type(&data, "cube_3/3/3");
 
     // show_info(&data);
 }
