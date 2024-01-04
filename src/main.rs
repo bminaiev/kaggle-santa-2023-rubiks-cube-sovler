@@ -1,215 +1,28 @@
 use std::{
     cmp::Reverse,
-    collections::{hash_map::DefaultHasher, BTreeMap, BinaryHeap, HashMap, HashSet},
+    collections::{hash_map::DefaultHasher, BTreeMap, BinaryHeap, HashMap, HashSet, VecDeque},
     hash::{Hash, Hasher},
+    os::linux::raw::stat,
     time::Instant,
 };
 
 use rand::{seq::SliceRandom, Rng};
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-struct Permutation {
-    cycles: Vec<Vec<usize>>,
-}
+use crate::{
+    data::{load_data, Data},
+    permutation::Permutation,
+    puzzle::Puzzle,
+    puzzle_type::PuzzleType,
+    solver::solve,
+    utils::get_blocks,
+};
 
-impl Permutation {
-    pub fn identity() -> Self {
-        Self { cycles: vec![] }
-    }
-
-    pub fn sum_len(&self) -> usize {
-        self.cycles.iter().map(|c| c.len()).sum()
-    }
-
-    pub fn from_array(p: &[usize]) -> Self {
-        let mut cycles = vec![];
-        let mut seen = vec![false; p.len()];
-        for start in 0..p.len() {
-            let mut cycle = vec![];
-            let mut cur = start;
-            while !seen[cur] {
-                cycle.push(cur);
-                seen[cur] = true;
-                cur = p[cur];
-            }
-            if cycle.len() > 1 {
-                cycles.push(cycle);
-            }
-        }
-        Self { cycles }
-    }
-
-    pub fn apply(&self, a: &mut [usize]) {
-        for cycle in self.cycles.iter() {
-            for w in cycle.windows(2) {
-                a.swap(w[0], w[1]);
-            }
-        }
-    }
-
-    pub fn combine(&self, other: &Self) -> Self {
-        let mut a = HashMap::new();
-        for who in [self, other].iter() {
-            for cycle in who.cycles.iter() {
-                for w in cycle.windows(2) {
-                    let v1 = *a.get(&w[0]).unwrap_or(&w[0]);
-                    let v2 = *a.get(&w[1]).unwrap_or(&w[1]);
-                    a.insert(w[0], v2);
-                    a.insert(w[1], v1);
-                }
-            }
-        }
-        let mut cycles = vec![];
-        let mut seen = HashSet::new();
-        let mut all_keys: Vec<usize> = a.keys().cloned().collect();
-        all_keys.sort();
-        for &start in all_keys.iter() {
-            let mut cycle = vec![];
-            let mut cur = start;
-            while !seen.contains(&cur) {
-                cycle.push(cur);
-                seen.insert(cur);
-                cur = a[&cur];
-            }
-            if cycle.len() > 1 {
-                cycles.push(cycle);
-            }
-        }
-        Self { cycles }
-    }
-
-    pub fn inv(&self) -> Self {
-        let cycles = self
-            .cycles
-            .iter()
-            .map(|cycle| cycle.iter().rev().cloned().collect())
-            .collect();
-        Self { cycles }
-    }
-}
-
-#[derive(Debug)]
-struct PuzzleType {
-    n: usize,
-    moves: BTreeMap<String, Permutation>,
-}
-
-fn load_puzzle_info() -> BTreeMap<String, PuzzleType> {
-    let mut reader = csv::Reader::from_path("data/puzzle_info.csv").unwrap();
-
-    let mut puzzle_info = BTreeMap::new();
-
-    for result in reader.records() {
-        let record = result.unwrap();
-        let name = record[0].to_string();
-        let moves: String = record[1].to_string();
-        let moves = moves.replace('\'', "\"");
-
-        let moves: BTreeMap<String, Vec<usize>> = serde_json::from_str(&moves).unwrap();
-        let n = moves.values().next().unwrap().len();
-        let moves: BTreeMap<String, Permutation> = moves
-            .into_iter()
-            .map(|(k, v)| (k, Permutation::from_array(&v)))
-            .collect();
-
-        let mut all_moves = moves.clone();
-        for (k, v) in moves.iter() {
-            all_moves.insert(format!("-{}", k), v.inv());
-        }
-        puzzle_info.insert(
-            name,
-            PuzzleType {
-                n,
-                moves: all_moves,
-            },
-        );
-    }
-
-    puzzle_info
-}
-
-struct Puzzle {
-    id: usize,
-    puzzle_type: String,
-    solution_state: Vec<usize>,
-    initial_state: Vec<usize>,
-    num_wildcards: usize,
-    num_colors: usize,
-    color_names: Vec<String>,
-}
-
-impl Puzzle {
-    pub fn convert_state(&self, state: &[usize]) -> String {
-        state
-            .iter()
-            .map(|x| self.color_names[*x].clone())
-            .collect::<Vec<_>>()
-            .join(";")
-    }
-}
-
-fn conv_colors(a: &[String], hm: &mut HashMap<String, usize>) -> Vec<usize> {
-    let mut res = vec![];
-    for x in a.iter() {
-        if !hm.contains_key(x) {
-            let new_id = hm.len();
-            hm.insert(x.clone(), new_id);
-        }
-        res.push(*hm.get(x).unwrap());
-    }
-    res
-}
-
-fn load_puzzles() -> Vec<Puzzle> {
-    let mut reader = csv::Reader::from_path("data/puzzles.csv").unwrap();
-
-    let mut puzzles: Vec<Puzzle> = Vec::new();
-
-    for result in reader.records() {
-        let record = result.unwrap();
-        let id = record[0].parse::<usize>().unwrap();
-        let puzzle_type = record[1].to_string();
-        let solution_state: Vec<String> = record[2].split(';').map(|s| s.to_string()).collect();
-        let initial_state: Vec<String> = record[3].split(';').map(|s| s.to_string()).collect();
-        let num_wildcards = record[4].parse::<usize>().unwrap();
-
-        let mut colors = HashMap::new();
-        let solution_state = conv_colors(&solution_state, &mut colors);
-        let initial_state = conv_colors(&initial_state, &mut colors);
-        let mut color_names = vec![String::new(); colors.len()];
-        for (k, v) in colors.iter() {
-            color_names[*v] = k.clone();
-        }
-
-        puzzles.push(Puzzle {
-            id,
-            puzzle_type,
-            solution_state,
-            initial_state,
-            num_wildcards,
-            num_colors: colors.len(),
-            color_names,
-        });
-    }
-
-    puzzles
-}
-
-fn load_solutions() -> HashMap<usize, Vec<String>> {
-    let mut reader = csv::Reader::from_path("data/sample_submission.csv").unwrap();
-
-    let mut solutions: HashMap<usize, Vec<String>> = HashMap::new();
-
-    for result in reader.records() {
-        let record = result.unwrap();
-        let id = record[0].parse::<usize>().unwrap();
-        let solution: Vec<String> = record[1].split('.').map(|s| s.to_string()).collect();
-
-        solutions.insert(id, solution);
-    }
-
-    solutions
-}
+pub mod data;
+pub mod permutation;
+pub mod puzzle;
+pub mod puzzle_type;
+pub mod solver;
+pub mod utils;
 
 fn check_solution(task: &Puzzle, solution: &[String], puzzle_info: &BTreeMap<String, PuzzleType>) {
     let mut state = task.initial_state.clone();
@@ -317,23 +130,6 @@ fn check_solution2(task: &Puzzle, solution: &[String], puzzle_info: &BTreeMap<St
     println!("{}: {}/{} fails", task.id, cnt_fails, task.num_wildcards);
 }
 
-struct Data {
-    puzzle_info: BTreeMap<String, PuzzleType>,
-    puzzles: Vec<Puzzle>,
-    solutions: HashMap<usize, Vec<String>>,
-}
-
-fn load_data() -> Data {
-    let puzzle_info = load_puzzle_info();
-    let puzzles = load_puzzles();
-    let solutions = load_solutions();
-    Data {
-        puzzle_info,
-        puzzles,
-        solutions,
-    }
-}
-
 fn show_info(data: &Data) {
     let puzzle_info = &data.puzzle_info;
     for (k, v) in puzzle_info.iter() {
@@ -434,7 +230,7 @@ fn analyze_puzzle_type(data: &Data, puzzle_type: &str) {
                 task.num_colors
             );
             // check_solution(tasks, sol, &data.puzzle_info);
-            new_solve(task, queue.clone(), &data.puzzle_info);
+            new_solve(task, &data.puzzle_info);
             break;
         }
     }
@@ -462,7 +258,232 @@ impl Block {
     }
 }
 
-fn new_solve(
+fn new_solve(task: &Puzzle, puzzle_info: &BTreeMap<String, PuzzleType>) {
+    let n = task.solution_state.len();
+    let puzzle_info = &puzzle_info[&task.puzzle_type];
+    let mut rng = rand::thread_rng();
+
+    let blocks = get_blocks(
+        task,
+        &puzzle_info.moves.values().cloned().collect::<Vec<_>>(),
+    );
+
+    for (k, mov) in puzzle_info.moves.iter() {
+        eprintln!("{}: {:?}", k, mov.cycles);
+    }
+    let mut move_groups = vec![];
+    move_groups.push(create_moves(
+        puzzle_info,
+        &["d0", "d1", "d2", "f0", "f1", "f2", "r0", "r1", "r2"],
+    ));
+    move_groups.push(create_moves(
+        puzzle_info,
+        &["d0", "d2", "f0", "f2", "r0", "r2"],
+    ));
+    move_groups.push(create_moves(
+        puzzle_info,
+        &["d0x2", "d2x2", "f0", "f2", "r0", "r2"],
+    ));
+    move_groups.push(create_moves(
+        puzzle_info,
+        &["d0x2", "d2x2", "f0x2", "f2x2", "r0", "r2"],
+    ));
+    move_groups.push(create_moves(
+        puzzle_info,
+        &["d0x2", "d2x2", "f0x2", "f2x2", "r0x2", "r2x2"],
+    ));
+    move_groups.push(create_moves(puzzle_info, &[]));
+
+    // for i in 0..move_groups.len() {
+    //     let is_possible = possible_to_solve(
+    //         &move_groups[i],
+    //         &blocks,
+    //         &task.initial_state,
+    //         &task.solution_state,
+    //     );
+    //     eprintln!("{i}. IS POSSIBLE: {is_possible}");
+    // }
+    for (it, w) in move_groups.windows(2).enumerate() {
+        eprintln!("{}..{}", it, it + 1);
+        between_groups(&w[0], &w[1], &blocks, n);
+        // if it == 2 {
+        //     break;
+        // }
+    }
+}
+
+fn get_all_perms(a: &[usize]) -> Vec<Vec<usize>> {
+    let mut res = vec![];
+    if a.len() == 1 {
+        res.push(a.to_vec());
+    } else if a.len() == 2 {
+        res.push(a.to_vec());
+        res.push(vec![a[1], a[0]]);
+    } else if a.len() == 3 {
+        res.push(a.to_vec());
+        res.push(vec![a[1], a[2], a[0]]);
+        res.push(vec![a[2], a[0], a[1]]);
+        res.push(vec![a[2], a[1], a[0]]);
+        res.push(vec![a[0], a[2], a[1]]);
+        res.push(vec![a[1], a[0], a[2]]);
+    } else {
+        panic!();
+    }
+    res
+}
+
+fn get_groups(blocks: &[Vec<usize>], moves: &[SeveralMoves]) -> HashMap<Vec<usize>, usize> {
+    let mut res = HashMap::new();
+    let mut cnt_groups = 0;
+    for block in blocks.iter() {
+        for perm in get_all_perms(block) {
+            if res.contains_key(&perm) {
+                continue;
+            }
+            let mut cur_group = vec![];
+            let mut queue = VecDeque::new();
+            cur_group.push(perm.clone());
+            queue.push_back(perm.clone());
+            res.insert(perm, cnt_groups);
+            while let Some(perm) = queue.pop_front() {
+                for mov in moves.iter() {
+                    let mut new_perm = perm.clone();
+                    for x in new_perm.iter_mut() {
+                        *x = mov.permutation.next(*x);
+                    }
+                    if !res.contains_key(&new_perm) {
+                        cur_group.push(new_perm.clone());
+                        res.insert(new_perm.clone(), cnt_groups);
+                        queue.push_back(new_perm);
+                    }
+                }
+            }
+            eprintln!("GROUP: {:?}", cur_group);
+            cnt_groups += 1;
+        }
+    }
+    res
+}
+
+fn between_groups(
+    moves1: &[SeveralMoves],
+    moves2: &[SeveralMoves],
+    blocks: &[Vec<usize>],
+    n: usize,
+) {
+    let groups = get_groups(blocks, moves2);
+
+    let calc_hash = |a: &[usize]| {
+        let mut hasher = DefaultHasher::new();
+        let mut inv = vec![0; n];
+        for (i, &x) in a.iter().enumerate() {
+            inv[x] = i;
+        }
+        let mut ids = vec![];
+        for block in blocks.iter() {
+            let mut group = vec![];
+            for &x in block.iter() {
+                group.push(a[x]);
+            }
+            let group_id = *groups.get(&group).unwrap();
+            ids.push(group_id);
+            hasher.write_usize(group_id);
+        }
+        let h = hasher.finish();
+        // eprintln!("CURRENT IDS: {:?}. Hash: {h}", ids);
+        h
+    };
+    let start_state: Vec<usize> = (0..n).collect();
+    let mut queue = VecDeque::new();
+    let mut seen = HashSet::new();
+    seen.insert(calc_hash(&start_state));
+    queue.push_back(start_state.clone());
+    while let Some(state) = queue.pop_front() {
+        for mov in moves1.iter() {
+            let mut new_state = state.clone();
+            mov.permutation.apply(&mut new_state);
+            let new_hash = calc_hash(&new_state);
+            if !seen.contains(&new_hash) {
+                seen.insert(new_hash);
+                queue.push_back(new_state);
+                if queue.len() % 10000 == 0 {
+                    eprintln!("Seen: {}. Queue: {}", seen.len(), queue.len());
+                }
+            }
+        }
+    }
+    eprintln!("Seen: {}", seen.len());
+}
+
+fn possible_to_solve(
+    available_moves: &[SeveralMoves],
+    blocks: &[Vec<usize>],
+    state: &[usize],
+    target_state: &[usize],
+) -> bool {
+    let mut seen = HashSet::new();
+    for block in blocks.iter() {
+        let start = block.clone();
+        let mut queue = VecDeque::new();
+        let seen_before = seen.len();
+        if !seen.insert(start.clone()) {
+            continue;
+        }
+        queue.push_back(start);
+        while let Some(positions) = queue.pop_front() {
+            for mov in available_moves.iter() {
+                let mut new_positions = positions.clone();
+                for x in new_positions.iter_mut() {
+                    *x = mov.permutation.next(*x);
+                }
+                if !seen.contains(&new_positions) {
+                    seen.insert(new_positions.clone());
+                    queue.push_back(new_positions);
+                }
+            }
+        }
+        eprintln!("Block: {:?} -> {}", block, seen.len() - seen_before);
+    }
+    true
+}
+
+fn create_moves(puzzle_info: &PuzzleType, moves: &[&str]) -> Vec<SeveralMoves> {
+    let mut res = vec![];
+    for &s in moves.iter() {
+        match s.strip_suffix("x2") {
+            Some(s) => {
+                res.push(SeveralMoves {
+                    name: vec![s.to_string(), s.to_string()],
+                    permutation: puzzle_info.moves[s].x2(),
+                });
+                let s = rev(s);
+                res.push(SeveralMoves {
+                    name: vec![s.to_string(), s.to_string()],
+                    permutation: puzzle_info.moves[&s].x2(),
+                });
+            }
+            None => {
+                res.push(SeveralMoves {
+                    name: vec![s.to_string()],
+                    permutation: puzzle_info.moves[s].clone(),
+                });
+                let s = rev(s);
+                res.push(SeveralMoves {
+                    name: vec![s.to_string()],
+                    permutation: puzzle_info.moves[&s].clone(),
+                });
+            }
+        }
+    }
+    res
+}
+
+struct SeveralMoves {
+    name: Vec<String>,
+    permutation: Permutation,
+}
+
+fn new_solve123(
     task: &Puzzle,
     mut queue: Vec<Permutation>,
     puzzle_info: &BTreeMap<String, PuzzleType>,
@@ -629,12 +650,72 @@ struct State {
     state: Vec<usize>,
 }
 
+fn possible_positions(block: &[usize], moves: &[Permutation]) -> Vec<Vec<usize>> {
+    let start = block.to_vec();
+    let mut queue = VecDeque::new();
+    let mut seen = HashSet::new();
+    seen.insert(start.clone());
+    queue.push_back(start);
+    while let Some(positions) = queue.pop_front() {
+        for mov in moves.iter() {
+            let mut new_positions = positions.clone();
+            for x in new_positions.iter_mut() {
+                *x = mov.next(*x);
+            }
+            if !seen.contains(&new_positions) {
+                seen.insert(new_positions.clone());
+                queue.push_back(new_positions);
+            }
+        }
+    }
+    seen.into_iter().collect()
+}
+
+fn analyze_permuations(data: &Data) {
+    for task in data.puzzles.iter() {
+        eprintln!(
+            "TASK ID: {}. Type: {}. Colors: {}",
+            task.id, task.puzzle_type, task.num_colors
+        );
+
+        let puzzle_info = &data.puzzle_info[&task.puzzle_type];
+        let moves = puzzle_info.moves.values().cloned().collect::<Vec<_>>();
+        let blocks = get_blocks(task, &moves);
+        let mut not_uniq = 0;
+        for block in blocks.iter() {
+            let positions = possible_positions(block, &moves);
+            let mut cnt_ok = 0;
+            for pos in positions.iter() {
+                let mut ok = true;
+                for i in 0..block.len() {
+                    let color = task.initial_state[block[i]];
+                    if task.initial_state[pos[i]] != color {
+                        ok = false;
+                    }
+                }
+                if ok {
+                    cnt_ok += 1;
+                }
+            }
+            assert!(cnt_ok > 0);
+            if cnt_ok != 1 {
+                not_uniq += 1;
+            }
+        }
+        if not_uniq != 0 {
+            eprintln!("Not uniq: {}", not_uniq);
+        }
+    }
+}
+
 fn main() {
     println!("Hello, world!");
 
     let data = load_data();
 
-    analyze_puzzle_type(&data, "cube_3/3/3");
+    // analyze_puzzle_type(&data, "cube_3/3/3");
+    // analyze_permuations(&data);
 
     // show_info(&data);
+    solve(&data, 30);
 }
