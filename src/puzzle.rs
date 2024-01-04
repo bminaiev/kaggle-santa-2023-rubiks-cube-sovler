@@ -19,4 +19,17 @@ impl Puzzle {
             .collect::<Vec<_>>()
             .join(";")
     }
+
+    pub fn convert_solution(&self, solution: &[String]) -> String {
+        let mut state = self.initial_state.clone();
+        for step in solution.iter() {
+            let perm = &self.info.moves[step];
+            for cycle in perm.cycles.iter() {
+                for w in cycle.windows(2) {
+                    state.swap(w[0], w[1]);
+                }
+            }
+        }
+        self.convert_state(&state)
+    }
 }

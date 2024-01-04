@@ -50,3 +50,23 @@ pub fn get_start_permutation(task: &Puzzle, solution: &[String]) -> Vec<usize> {
     }
     inv
 }
+
+pub fn get_all_perms(a: &[usize]) -> Vec<Vec<usize>> {
+    let mut res = vec![];
+    if a.len() == 1 {
+        res.push(a.to_vec());
+    } else if a.len() == 2 {
+        res.push(a.to_vec());
+        res.push(vec![a[1], a[0]]);
+    } else if a.len() == 3 {
+        res.push(a.to_vec());
+        res.push(vec![a[1], a[2], a[0]]);
+        res.push(vec![a[2], a[0], a[1]]);
+        res.push(vec![a[2], a[1], a[0]]);
+        res.push(vec![a[0], a[2], a[1]]);
+        res.push(vec![a[1], a[0], a[2]]);
+    } else {
+        panic!();
+    }
+    res
+}

@@ -44,6 +44,14 @@ impl Permutation {
         }
     }
 
+    pub fn apply_rev(&self, a: &mut [usize]) {
+        for cycle in self.cycles.iter() {
+            for w in cycle.windows(2).rev() {
+                a.swap(w[0], w[1]);
+            }
+        }
+    }
+
     pub fn combine(&self, other: &Self) -> Self {
         let mut a = HashMap::new();
         for who in [self, other].iter() {
