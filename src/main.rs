@@ -395,7 +395,7 @@ fn analyze_permuations(data: &Data) {
 
         let puzzle_info = &data.puzzle_info[&task.puzzle_type];
         let moves = puzzle_info.moves.values().cloned().collect::<Vec<_>>();
-        let blocks = get_blocks(task, &moves);
+        let blocks = get_blocks(task.info.n, &moves);
         let mut not_uniq = 0;
         for block in blocks.iter() {
             let positions = possible_positions(block, &moves);
@@ -432,5 +432,5 @@ fn main() {
     // analyze_permuations(&data);
 
     // show_info(&data);
-    solve(&data, 31);
+    solve(&data, "cube_3/3/3");
 }

@@ -2,8 +2,7 @@ use rand::Rng;
 
 use crate::{permutation::Permutation, puzzle::Puzzle};
 
-pub fn get_blocks(task: &Puzzle, moves: &[Permutation]) -> Vec<Vec<usize>> {
-    let n = task.solution_state.len();
+pub fn get_blocks(n: usize, moves: &[Permutation]) -> Vec<Vec<usize>> {
     let mut rng = rand::thread_rng();
 
     let mut blocks = vec![];

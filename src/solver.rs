@@ -92,21 +92,39 @@ fn precompute_moves(
     res
 }
 
-pub fn solve(data: &Data, task_id: usize) {
-    eprintln!("SOLVING {task_id}");
-    let task = &data.puzzles[task_id];
-    let example_solution = &data.solutions[&task_id];
-    let mut state = get_start_permutation(task, example_solution);
-    eprintln!("START STATE: {:?}", state);
+#[derive(Clone)]
+struct TaskSolution {
+    task_id: usize,
+    answer: Vec<String>,
+    failed_on_stage: Option<usize>,
+    state: Vec<usize>,
+}
 
-    let move_groups = create_move_groups(&task.info);
+pub fn solve(data: &Data, task_type: &str) {
+    eprintln!("SOLVING {task_type}");
+    let mut solutions = vec![];
+    for task in data.puzzles.iter() {
+        if task.puzzle_type == task_type {
+            solutions.push(TaskSolution {
+                task_id: task.id,
+                answer: vec![],
+                failed_on_stage: None,
+                state: get_start_permutation(task, &data.solutions[&task.id]),
+            })
+        }
+    }
+    assert!(!solutions.is_empty());
+    let puzzle_info = data.puzzle_info.get(task_type).unwrap();
+
+    let move_groups = create_move_groups(puzzle_info);
     eprintln!("Total move groups: {}", move_groups.len());
-    let moves = task.info.moves.values().cloned().collect::<Vec<_>>();
-    let blocks = get_blocks(task, &moves);
-    // let n = task.info.n;
-    let mut answer = vec![];
-    for w in move_groups.windows(2) {
-        eprintln!("Calculating groups...");
+    let moves = puzzle_info.moves.values().cloned().collect::<Vec<_>>();
+    let blocks = get_blocks(puzzle_info.n, &moves);
+    for (step, w) in move_groups.windows(2).enumerate() {
+        // if step <= 2 {
+        //     continue;
+        // }
+        eprintln!("Calculating groups... Step: {step}");
         let groups = get_groups(&blocks, &w[1]);
         eprintln!("Groups are calculated.");
         let calc_hash = |a: &[usize]| {
@@ -127,17 +145,33 @@ pub fn solve(data: &Data, task_id: usize) {
             }
             hasher.finish()
         };
-        let prec = precompute_moves(task.info.n, &w[0], calc_hash);
+        let prec = precompute_moves(puzzle_info.n, &w[0], calc_hash);
         eprintln!("Precumputed size: {}", prec.len());
-        apply_precomputed_moves(&mut state, &prec, calc_hash, &mut answer);
-        eprintln!("New answer: {:?}. Len = {}", answer, answer.len());
-        eprintln!("new state: {:?}", state);
+        let mut cnt_ok = 0;
+        for sol in solutions.iter_mut() {
+            if sol.failed_on_stage.is_some() {
+                continue;
+            }
+            if !apply_precomputed_moves(&mut sol.state, &prec, calc_hash, &mut sol.answer) {
+                sol.failed_on_stage = Some(step);
+            } else {
+                cnt_ok += 1;
+            }
+        }
+        eprintln!("Still ok solutions: {cnt_ok}/{}", solutions.len());
     }
-    for i in 0..state.len() {
-        assert_eq!(i, state[i]);
+    for sol in solutions.iter() {
+        if sol.failed_on_stage.is_some() {
+            continue;
+        }
+        let task = &data.puzzles[sol.task_id];
+        eprintln!(
+            "SOLUTION: {}. State={}",
+            sol.task_id,
+            task.convert_solution(&sol.answer)
+        );
+        check_solution(task, &sol.answer);
     }
-    check_solution(task, &answer);
-    eprintln!("LAST STATE: {}", task.convert_solution(&answer));
 }
 
 fn apply_precomputed_moves(
@@ -145,18 +179,18 @@ fn apply_precomputed_moves(
     prec: &HashMap<u64, Edge<'_>>,
     get_state: impl Fn(&[usize]) -> u64,
     answer: &mut Vec<String>,
-) {
+) -> bool {
     let mut cur_hash = get_state(state);
     while let Some(edge) = prec.get(&cur_hash) {
         if let Some(mov) = edge.mov {
             mov.permutation.apply(state);
             answer.extend(mov.name.clone());
         } else {
-            return;
+            return true;
         }
         cur_hash = edge.next_state_hash;
     }
-    unreachable!();
+    false
 }
 
 fn get_groups(blocks: &[Vec<usize>], moves: &[SeveralMoves]) -> HashMap<Vec<usize>, usize> {
