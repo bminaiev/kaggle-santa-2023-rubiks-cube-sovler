@@ -137,6 +137,7 @@ dependencies = [
  "csv",
  "fastrand",
  "rand",
+ "rand_chacha",
  "random",
  "serde_json",
 ]

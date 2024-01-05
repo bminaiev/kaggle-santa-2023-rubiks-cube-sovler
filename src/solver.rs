@@ -1,7 +1,10 @@
 use std::{
-    collections::{hash_map::DefaultHasher, HashMap, HashSet, VecDeque},
+    collections::{hash_map::DefaultHasher, BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
     hash::Hasher,
 };
+
+use rand::{seq::SliceRandom, SeedableRng};
+use rand_chacha::ChaCha8Rng;
 
 use crate::{
     checker::check_solution,
@@ -45,13 +48,13 @@ struct Edge<'a> {
     len: usize,
 }
 
-fn precompute_moves(
+fn precompute_moves<'a>(
     n: usize,
-    moves: &[SeveralMoves],
-    get_state: impl Fn(&[usize]) -> u64,
-) -> HashMap<u64, Edge<'_>> {
+    moves: &'a [SeveralMoves],
+    get_state: &mut impl FnMut(&[usize], bool) -> u64,
+) -> HashMap<u64, Edge<'a>> {
     let final_state: Vec<_> = (0..n).collect();
-    let hash = get_state(&final_state);
+    let hash = get_state(&final_state, false);
     let mut queues = vec![Vec::new(); 50];
     queues[0].push(final_state);
     let mut res = HashMap::new();
@@ -63,13 +66,18 @@ fn precompute_moves(
             len: 0,
         },
     );
+    let mut it = 0;
     for cur_d in 0..queues.len() {
         while let Some(state) = queues[cur_d].pop() {
-            let cur_hash = get_state(&state);
+            it += 1;
+            if it % 100_000 == 0 {
+                eprintln!("it: {}", it);
+            }
+            let cur_hash = get_state(&state, false);
             for mov in moves.iter() {
                 let mut new_state = state.clone();
                 mov.permutation.apply_rev(&mut new_state);
-                let hash = get_state(&new_state);
+                let hash = get_state(&new_state, false);
                 let len = cur_d + mov.name.len();
                 let should_add = match res.get(&hash) {
                     None => true,
@@ -100,6 +108,8 @@ struct TaskSolution {
     state: Vec<usize>,
 }
 
+type Block = Vec<usize>;
+
 pub fn solve(data: &Data, task_type: &str) {
     eprintln!("SOLVING {task_type}");
     let mut solutions = vec![];
@@ -120,32 +130,40 @@ pub fn solve(data: &Data, task_type: &str) {
     eprintln!("Total move groups: {}", move_groups.len());
     let moves = puzzle_info.moves.values().cloned().collect::<Vec<_>>();
     let blocks = get_blocks(puzzle_info.n, &moves);
+
+    for (i, block) in blocks.iter().enumerate() {
+        eprintln!("Block {i}: {block:?}");
+    }
+
     for (step, w) in move_groups.windows(2).enumerate() {
-        // if step <= 2 {
-        //     continue;
-        // }
         eprintln!("Calculating groups... Step: {step}");
         let groups = get_groups(&blocks, &w[1]);
         eprintln!("Groups are calculated.");
-        let calc_hash = |a: &[usize]| {
+
+        let hacks_info = step == 3;
+
+        let mut calc_hash = |a: &[usize], debug: bool| {
             let mut hasher = DefaultHasher::new();
-            // let mut inv = vec![0; n];
-            // for (i, &x) in a.iter().enumerate() {
-            //     inv[x] = i;
-            // }
-            // let mut ids = vec![];
             for block in blocks.iter() {
                 let mut group = vec![];
                 for &x in block.iter() {
                     group.push(a[x]);
                 }
-                let group_id = *groups.get(&group).unwrap();
-                // ids.push(group_id);
+                let group_id = *groups.by_elem.get(&group).unwrap();
                 hasher.write_usize(group_id);
+            }
+            if hacks_info {
+                for block in blocks.iter() {
+                    if block.len() != 3 {
+                        continue;
+                    }
+                    let min = block.iter().map(|&x| a[x]).min().unwrap();
+                    hasher.write_usize(min);
+                }
             }
             hasher.finish()
         };
-        let prec = precompute_moves(puzzle_info.n, &w[0], calc_hash);
+        let prec = precompute_moves(puzzle_info.n, &w[0], &mut calc_hash);
         eprintln!("Precumputed size: {}", prec.len());
         let mut cnt_ok = 0;
         for sol in solutions.iter_mut() {
@@ -166,8 +184,10 @@ pub fn solve(data: &Data, task_type: &str) {
         }
         let task = &data.puzzles[sol.task_id];
         eprintln!(
-            "SOLUTION: {}. State={}",
+            "TASK: {}. SOL LEN={}, colors = {}, State={}",
             sol.task_id,
+            sol.answer.len(),
+            task.num_colors,
             task.convert_solution(&sol.answer)
         );
         check_solution(task, &sol.answer);
@@ -177,10 +197,10 @@ pub fn solve(data: &Data, task_type: &str) {
 fn apply_precomputed_moves(
     state: &mut [usize],
     prec: &HashMap<u64, Edge<'_>>,
-    get_state: impl Fn(&[usize]) -> u64,
+    get_state: impl Fn(&[usize], bool) -> u64,
     answer: &mut Vec<String>,
 ) -> bool {
-    let mut cur_hash = get_state(state);
+    let mut cur_hash = get_state(state, false);
     while let Some(edge) = prec.get(&cur_hash) {
         if let Some(mov) = edge.mov {
             mov.permutation.apply(state);
@@ -193,9 +213,16 @@ fn apply_precomputed_moves(
     false
 }
 
-fn get_groups(blocks: &[Vec<usize>], moves: &[SeveralMoves]) -> HashMap<Vec<usize>, usize> {
+struct Groups {
+    groups: Vec<Vec<Vec<usize>>>,
+    by_elem: HashMap<Vec<usize>, usize>,
+}
+
+fn get_groups(blocks: &[Vec<usize>], moves: &[SeveralMoves]) -> Groups {
+    eprintln!("Get groups");
     let mut res = HashMap::new();
     let mut cnt_groups = 0;
+    let mut all_groups = vec![];
     for block in blocks.iter() {
         for perm in get_all_perms(block) {
             if res.contains_key(&perm) {
@@ -219,8 +246,12 @@ fn get_groups(blocks: &[Vec<usize>], moves: &[SeveralMoves]) -> HashMap<Vec<usiz
                     }
                 }
             }
+            all_groups.push(cur_group);
             cnt_groups += 1;
         }
     }
-    res
+    Groups {
+        groups: all_groups,
+        by_elem: res,
+    }
 }
