@@ -1,6 +1,6 @@
 use rand::Rng;
 
-use crate::{permutation::Permutation, puzzle::Puzzle};
+use crate::{moves::SeveralMoves, permutation::Permutation, puzzle::Puzzle};
 
 pub fn get_blocks(n: usize, moves: &[Permutation]) -> Vec<Vec<usize>> {
     let mut rng = rand::thread_rng();
@@ -30,6 +30,16 @@ pub fn get_blocks(n: usize, moves: &[Permutation]) -> Vec<Vec<usize>> {
         blocks.push(group);
     }
     blocks
+}
+
+pub fn get_blocks_by_several_moves(n: usize, moves: &[SeveralMoves]) -> Vec<Vec<usize>> {
+    get_blocks(
+        n,
+        &moves
+            .iter()
+            .map(|sv| sv.permutation.clone())
+            .collect::<Vec<_>>(),
+    )
 }
 
 pub fn get_start_permutation(task: &Puzzle, solution: &[String]) -> Vec<usize> {

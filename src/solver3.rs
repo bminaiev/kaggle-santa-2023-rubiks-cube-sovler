@@ -9,7 +9,7 @@ use rand_chacha::ChaCha8Rng;
 use crate::{
     checker::check_solution,
     data::Data,
-    groups::{apply_precomputed_moves, get_groups, precompute_moves, Edge},
+    groups::{apply_precomputed_moves, get_groups, precompute_moves, Edge, PREC_LIMIT},
     moves::{create_moves, SeveralMoves},
     puzzle_type::PuzzleType,
     sol_utils::TaskSolution,
@@ -77,7 +77,7 @@ pub fn solve(data: &Data, task_type: &str) {
             }
             hasher.finish()
         };
-        let prec = precompute_moves(puzzle_info.n, &w[0], &mut calc_hash);
+        let prec = precompute_moves(puzzle_info.n, &w[0], &mut calc_hash, PREC_LIMIT);
         eprintln!("Precumputed size: {}", prec.len());
         let mut cnt_ok = 0;
         for sol in solutions.iter_mut() {

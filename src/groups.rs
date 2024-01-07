@@ -1,5 +1,6 @@
 use std::{
     collections::{hash_map::DefaultHasher, HashMap, VecDeque},
+    f32::consts::E,
     hash::Hasher,
 };
 
@@ -72,10 +73,13 @@ pub struct Edge<'a> {
     pub len: usize,
 }
 
+pub const PREC_LIMIT: usize = 10_000_000;
+
 pub fn precompute_moves<'a>(
     n: usize,
     moves: &'a [SeveralMoves],
     get_state: &mut impl FnMut(&[usize], bool) -> u64,
+    limit: usize,
 ) -> HashMap<u64, Edge<'a>> {
     let final_state: Vec<_> = (0..n).collect();
     let hash = get_state(&final_state, false);
@@ -92,10 +96,15 @@ pub fn precompute_moves<'a>(
     );
     let mut it = 0;
     for cur_d in 0..queues.len() {
+        eprintln!("cur_d: {cur_d}. it = {it}");
         while let Some(state) = queues[cur_d].pop() {
             it += 1;
             if it % 100_000 == 0 {
                 eprintln!("it: {}", it);
+            }
+            if it > limit {
+                eprintln!("LIMIT {limit} REACHED");
+                return res;
             }
             let cur_hash = get_state(&state, false);
             for mov in moves.iter() {
@@ -120,6 +129,7 @@ pub fn precompute_moves<'a>(
                 }
             }
         }
+        queues[cur_d].shrink_to_fit();
     }
     res
 }
@@ -139,6 +149,90 @@ pub fn apply_precomputed_moves(
             return true;
         }
         cur_hash = edge.next_state_hash;
+        assert_eq!(cur_hash, get_state(state, false));
+    }
+    false
+}
+
+pub fn apply_precomputed_moves_bfs(
+    start_state: &mut [usize],
+    prec: &HashMap<u64, Edge<'_>>,
+    get_state: impl Fn(&[usize], bool) -> u64,
+    answer: &mut Vec<String>,
+    moves: &[SeveralMoves],
+) -> bool {
+    let start_hash = get_state(start_state, false);
+    let mut queues = vec![Vec::new(); 50];
+    queues[0].push(start_state.to_vec());
+    let mut res = HashMap::new();
+    res.insert(
+        start_hash,
+        Edge {
+            next_state_hash: start_hash,
+            mov: None,
+            len: 0,
+        },
+    );
+    let mut it = 0;
+    for cur_d in 0..queues.len() {
+        while let Some(state) = queues[cur_d].pop() {
+            it += 1;
+            if it % 100_000 == 0 {
+                eprintln!("it: {}", it);
+            }
+            let cur_hash = get_state(&state, false);
+            for mov in moves.iter() {
+                let mut new_state = state.clone();
+                mov.permutation.apply(&mut new_state);
+                let hash = get_state(&new_state, false);
+                let len = cur_d + mov.name.len();
+
+                if prec.contains_key(&hash) {
+                    eprintln!("FOUND HIT AT DISTANCE {cur_d}");
+                    let mut moves_to_apply = vec![mov];
+                    let mut tmp_hash = cur_hash;
+                    while tmp_hash != start_hash {
+                        let edge = res.get(&tmp_hash).unwrap();
+                        moves_to_apply.push(edge.mov.unwrap());
+                        tmp_hash = edge.next_state_hash;
+                    }
+                    moves_to_apply.reverse();
+                    for mov in moves_to_apply.iter() {
+                        mov.permutation.apply(start_state);
+                        answer.extend(mov.name.clone());
+                    }
+                    assert_eq!(get_state(start_state, false), hash);
+                    assert!(apply_precomputed_moves(
+                        start_state,
+                        prec,
+                        &get_state,
+                        answer
+                    ));
+                    let st1 = get_state(&(0..start_state.len()).collect::<Vec<_>>(), true);
+                    let st2 = get_state(start_state, true);
+                    eprintln!("ST1: {}", st1);
+                    eprintln!("ST2: {}", st2);
+                    assert_eq!(st1, st2);
+                    return true;
+                }
+
+                let should_add = match res.get(&hash) {
+                    None => true,
+                    Some(edge) => edge.len > len,
+                };
+                if should_add {
+                    res.insert(
+                        hash,
+                        Edge {
+                            next_state_hash: cur_hash,
+                            mov: Some(mov),
+                            len,
+                        },
+                    );
+                    queues[len].push(new_state);
+                }
+            }
+        }
     }
     false
 }
