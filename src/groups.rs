@@ -51,6 +51,28 @@ pub fn get_groups(blocks: &[Vec<usize>], moves: &[SeveralMoves]) -> Groups {
     }
 }
 
+pub fn blocks_bfs(start_block: &[usize], moves: &[SeveralMoves]) -> HashMap<Vec<usize>, usize> {
+    let mut res = HashMap::new();
+    let mut queue = VecDeque::new();
+    queue.push_back(start_block.to_vec());
+    res.insert(start_block.to_vec(), 0);
+    while let Some(block) = queue.pop_front() {
+        let cur_d = *res.get(&block).unwrap();
+        for mov in moves.iter() {
+            let mut new_block = block.clone();
+            for x in new_block.iter_mut() {
+                *x = mov.permutation.next(*x);
+            }
+            let ndist = cur_d + mov.name.len();
+            if !res.contains_key(&new_block) || res[&new_block] > ndist {
+                res.insert(new_block.clone(), ndist);
+                queue.push_back(new_block);
+            }
+        }
+    }
+    res
+}
+
 impl Groups {
     pub fn hash(&self, a: &[usize]) -> DefaultHasher {
         let mut hasher = DefaultHasher::new();
@@ -75,13 +97,13 @@ pub struct Edge<'a> {
 
 pub const PREC_LIMIT: usize = 10_000_000;
 
-pub fn precompute_moves<'a>(
+pub fn precompute_moves_from_final_state<'a>(
     n: usize,
     moves: &'a [SeveralMoves],
     get_state: &mut impl FnMut(&[usize], bool) -> u64,
     limit: usize,
+    final_state: Vec<usize>,
 ) -> HashMap<u64, Edge<'a>> {
-    let final_state: Vec<_> = (0..n).collect();
     let hash = get_state(&final_state, false);
     let mut queues = vec![Vec::new(); 50];
     queues[0].push(final_state);
@@ -132,6 +154,15 @@ pub fn precompute_moves<'a>(
         queues[cur_d].shrink_to_fit();
     }
     res
+}
+
+pub fn precompute_moves<'a>(
+    n: usize,
+    moves: &'a [SeveralMoves],
+    get_state: &mut impl FnMut(&[usize], bool) -> u64,
+    limit: usize,
+) -> HashMap<u64, Edge<'a>> {
+    precompute_moves_from_final_state(n, moves, get_state, limit, (0..n).collect())
 }
 
 pub fn apply_precomputed_moves(
