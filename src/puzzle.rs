@@ -1,5 +1,6 @@
 use crate::puzzle_type::PuzzleType;
 
+#[derive(Clone)]
 pub struct Puzzle {
     pub id: usize,
     pub puzzle_type: String,
@@ -18,6 +19,10 @@ impl Puzzle {
             .map(|x| self.color_names[*x].clone())
             .collect::<Vec<_>>()
             .join(";")
+    }
+
+    pub fn convert_state_to_colors(&self, state: &[usize]) -> Vec<usize> {
+        state.iter().map(|&x| self.solution_state[x]).collect()
     }
 
     pub fn convert_solution(&self, solution: &[String]) -> String {

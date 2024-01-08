@@ -32,9 +32,12 @@ impl Subspace {
         self.interesting_positions.binary_search(&x).ok()
     }
 
-    fn get_moves(&self, puzzle_info: &PuzzleType) -> Vec<SeveralMoves> {
+    fn get_moves(&self, puzzle_info: &PuzzleType, forbidden_moves: &[String]) -> Vec<SeveralMoves> {
         let mut res = vec![];
         for (k, perm) in puzzle_info.moves.iter() {
+            if forbidden_moves.contains(k) {
+                continue;
+            }
             let mut interesting_move = false;
             for &cell_id in self.interesting_positions.iter() {
                 for cycle in perm.cycles.iter() {
@@ -154,24 +157,47 @@ pub fn solve_subproblem(
     dy: usize,
 ) {
     let mut interesting_positions = calc_positions(squares, dx, dy);
-    let mut more = calc_positions(squares, 0, 0);
-    interesting_positions.append(&mut more);
+    // let mut more = calc_positions(squares, 0, 0);
+    // interesting_positions.append(&mut more);
     let subspace = Subspace::new(interesting_positions);
     let sz = squares[0].len();
     let first_sq_positions: Vec<_> = (0..subspace.interesting_positions.len())
-        .filter(|&pos| subspace.interesting_positions[pos] < sz * sz)
+        .filter(|&pos| {
+            let x = subspace.interesting_positions[pos];
+            x > sz * sz && x < sz * sz * 2
+        })
         .collect();
-    let moves = subspace.get_moves(puzzle_info);
+    let mut forbidden_moves = vec![];
+    if dx != 0 || dy != 0 {
+        for mv in ["d", "f", "r"] {
+            for sign in ["", "-"] {
+                let name = format!("{sign}{mv}{}", sz / 2);
+                forbidden_moves.push(name);
+            }
+        }
+    }
+    eprintln!("FORBIDDEN MOVES: {forbidden_moves:?}");
+    let moves = subspace.get_moves(puzzle_info, &forbidden_moves);
     eprintln!("Solve subproblem {dx}, {dy}. Moves: {}", moves.len());
     for sol in solutions.iter_mut() {
-        let state = subspace.conv_state(&sol.state);
-        eprintln!("my state: {state:?}");
+        let state: Vec<_> = subspace
+            .interesting_positions
+            .iter()
+            .map(|&x| sol.task.solution_state[sol.state[x]])
+            .collect();
+        eprintln!("Before conv: {state:?}");
+        // let state = sol.task.convert_state_to_colors(&state);
+        let target_state = sol
+            .task
+            .convert_state_to_colors(&subspace.interesting_positions);
+        eprintln!("Target state: {target_state:?}");
+        // eprintln!("my state: {state:?}");
 
         for max_layers in 0.. {
             eprintln!("max_layers={max_layers}");
             let dist = |a: &[usize]| -> usize {
                 for &i in first_sq_positions.iter() {
-                    if a[i] != i {
+                    if a[i] != target_state[i] {
                         return 1;
                     }
                 }
@@ -259,13 +285,20 @@ pub fn solve_nnn(data: &Data, task_type: &str) {
         }
     };
 
-    solve_subproblem(&mut solutions, puzzle_info, &squares, 0, 0);
-    solve_subproblem(&mut solutions, puzzle_info, &squares, 0, 2);
+    // solve_subproblem(&mut solutions, puzzle_info, &squares, 0, 0);
+    // solve_subproblem(&mut solutions, puzzle_info, &squares, 0, sz / 2);
 
-    solve_subproblem(&mut solutions, puzzle_info, &squares, 0, 3);
+    for d in 0..=sz / 2 {
+        solve_subproblem(&mut solutions, puzzle_info, &squares, 0, d);
+        for sol in solutions.iter() {
+            sol.print(data);
+        }
+    }
+    // solve_subproblem(&mut solutions, puzzle_info, &squares, 0, 1);
+    // solve_subproblem(&mut solutions, puzzle_info, &squares, 0, 2);
 
     for sol in solutions.iter() {
         sol.print(data);
-        show_ids(&solutions[0].get_correct_positions());
+        show_ids(&solutions[0].get_correct_colors_positions());
     }
 }
