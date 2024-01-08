@@ -16,6 +16,7 @@ use crate::{
     puzzle_type::PuzzleType,
     solver3::solve,
     solver4::solve4,
+    solver_nnn::solve_nnn,
     utils::{get_all_perms, get_blocks},
 };
 
@@ -29,6 +30,7 @@ pub mod puzzle_type;
 pub mod sol_utils;
 pub mod solver3;
 pub mod solver4;
+pub mod solver_nnn;
 pub mod utils;
 
 fn calc_hash(a: &[usize]) -> u64 {
@@ -436,5 +438,6 @@ fn main() {
     // analyze_permuations(&data);
 
     // show_info(&data);
-    solve4(&data, "cube_4/4/4");
+    // solve4(&data, "cube_4/4/4");
+    solve_nnn(&data, "cube_19/19/19");
 }

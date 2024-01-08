@@ -39,4 +39,10 @@ impl TaskSolution {
             task.convert_solution(&self.answer)
         );
     }
+
+    pub fn get_correct_positions(&self) -> Vec<usize> {
+        (0..self.state.len())
+            .filter(|&i| self.state[i] == i)
+            .collect()
+    }
 }

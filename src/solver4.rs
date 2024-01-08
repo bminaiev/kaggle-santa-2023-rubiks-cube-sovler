@@ -1,5 +1,5 @@
 use std::{
-    collections::{hash_map::DefaultHasher, HashSet},
+    collections::{hash_map::DefaultHasher, HashMap, HashSet},
     hash::Hasher,
 };
 
@@ -13,7 +13,7 @@ use crate::{
     puzzle::Puzzle,
     puzzle_type::PuzzleType,
     sol_utils::TaskSolution,
-    utils::{get_blocks, get_blocks_by_several_moves},
+    utils::{get_blocks, get_blocks_by_several_moves, perm_inv},
 };
 
 // R2 == "r0x2"
@@ -302,7 +302,12 @@ fn dfs(
     state: &mut [usize],
     moves: &[SeveralMoves],
     estimate_dist: &impl Fn(&[usize]) -> usize,
+    iter: &mut usize,
 ) -> bool {
+    *iter += 1;
+    if *iter % 100_000 == 0 {
+        eprintln!("ITER: {}", *iter);
+    }
     let dist = estimate_dist(state);
     if dist == 0 {
         return true;
@@ -315,12 +320,24 @@ fn dfs(
             continue;
         }
         mov.permutation.apply(state);
-        if dfs(more_layers - mov.name.len(), state, moves, estimate_dist) {
+        if dfs(
+            more_layers - mov.name.len(),
+            state,
+            moves,
+            estimate_dist,
+            iter,
+        ) {
             return true;
         }
         mov.permutation.apply_rev(state);
     }
     false
+}
+
+#[derive(Clone)]
+struct StayBlock {
+    who: Vec<Vec<usize>>,
+    dist: HashMap<Vec<usize>, usize>,
 }
 
 pub fn step_3(
@@ -335,7 +352,8 @@ pub fn step_3(
 
     // let groups = get_groups(&blocks, next_moves);
 
-    let mut stay_together = vec![];
+    let mut stay_together4 = vec![];
+    let mut stay_together2 = vec![];
     for bl in new_blocks.iter() {
         if !blocks.contains(bl) {
             eprintln!("New block: {:?}", bl);
@@ -344,7 +362,7 @@ pub fn step_3(
                 // stay_together.push(bl.clone());
                 let lh = convert_to_low_high_edges(bl);
                 // eprintln!("LOW/HIGH: {:?}", convert_to_low_high_edges(bl));
-                stay_together.push([
+                stay_together4.push([
                     LOW_EDGES[lh[0]][0],
                     LOW_EDGES[lh[0]][1],
                     HIGH_EDGES[lh[1]][0],
@@ -352,6 +370,8 @@ pub fn step_3(
                 ]);
                 // let cur_group = *groups.by_elem.get(bl).unwrap();
                 // eprintln!("CUR GROUP: {:?}", groups.groups[cur_group]);
+            } else {
+                stay_together2.push(bl.clone());
             }
         }
     }
@@ -361,7 +381,7 @@ pub fn step_3(
     // [l/h id][stay_together_id] -> min len
     let mut cost = vec![vec![usize::MAX; 4]; 144];
 
-    for (i, stay) in stay_together.iter().enumerate() {
+    for (i, stay) in stay_together4.iter().enumerate() {
         eprintln!("Stay together {}: {:?}", i, stay);
         let positions = blocks_bfs(stay, prev_moves);
         for (k, v) in positions.iter() {
@@ -371,6 +391,24 @@ pub fn step_3(
             all_keys.insert(k.clone());
         }
     }
+
+    let mut stay_blocks = vec![];
+    for (i, stay) in stay_together2.iter().enumerate() {
+        eprintln!("Stay together2 {}: {:?}", i, stay);
+
+        let prev_blocks = blocks_bfs(stay, prev_moves);
+        let next_blocks = blocks_bfs(stay, next_moves);
+
+        stay_blocks.push(StayBlock {
+            dist: prev_blocks,
+            who: next_blocks.keys().cloned().collect(),
+        });
+
+        for (k, v) in next_blocks.iter() {
+            eprintln!("{k:?} -> {v}");
+        }
+    }
+    stay_blocks.truncate(5);
 
     let mut id = vec![usize::MAX; puzzle_info.n];
     for (i, edge) in LOW_EDGES.iter().enumerate() {
@@ -384,13 +422,25 @@ pub fn step_3(
         }
     }
 
+    // let mut state = [
+    //     48, 14, 13, 19, 68, 85, 86, 88, 40, 10, 89, 93, 95, 4, 39, 76, 47, 65, 52, 63, 45, 21, 57,
+    //     33, 78, 54, 58, 29, 0, 34, 46, 67, 92, 62, 77, 32, 11, 69, 70, 8, 81, 38, 37, 75, 12, 20,
+    //     49, 80, 15, 17, 18, 3, 66, 26, 25, 56, 24, 22, 53, 50, 79, 61, 30, 31, 35, 55, 27, 60, 43,
+    //     42, 41, 87, 1, 73, 74, 84, 44, 59, 23, 51, 64, 7, 91, 16, 36, 6, 90, 71, 72, 5, 9, 2, 83,
+    //     82, 94, 28,
+    // ];
+
     let mut state = [
-        48, 14, 13, 19, 68, 85, 86, 88, 40, 10, 89, 93, 95, 4, 39, 76, 47, 65, 52, 63, 45, 21, 57,
-        33, 78, 54, 58, 29, 0, 34, 46, 67, 92, 62, 77, 32, 11, 69, 70, 8, 81, 38, 37, 75, 12, 20,
-        49, 80, 15, 17, 18, 3, 66, 26, 25, 56, 24, 22, 53, 50, 79, 61, 30, 31, 35, 55, 27, 60, 43,
-        42, 41, 87, 1, 73, 74, 84, 44, 59, 23, 51, 64, 7, 91, 16, 36, 6, 90, 71, 72, 5, 9, 2, 83,
+        48, 14, 13, 19, 68, 85, 86, 88, 40, 10, 89, 93, 92, 11, 7, 12, 63, 33, 34, 67, 52, 57, 54,
+        46, 78, 53, 58, 29, 47, 45, 65, 0, 16, 62, 77, 32, 91, 69, 70, 8, 81, 73, 74, 75, 64, 20,
+        49, 80, 15, 17, 18, 3, 66, 26, 25, 56, 24, 22, 21, 50, 79, 61, 30, 31, 35, 55, 27, 76, 43,
+        42, 41, 39, 1, 38, 37, 84, 44, 59, 23, 95, 60, 87, 4, 51, 36, 6, 90, 71, 72, 5, 9, 2, 83,
         82, 94, 28,
     ];
+    for st in stay_together2.iter() {
+        let mut vals = st.iter().map(|&x| state[x]).collect::<Vec<_>>();
+        eprintln!("!! ! {st:?} -> {vals:?}");
+    }
 
     // dist is at least this big
     let esimate_dist = |a: &[usize]| -> usize {
@@ -408,7 +458,19 @@ pub fn step_3(
                 mincost[j] = mincost[j].min(cost[lh][j]);
             }
         }
-        *mincost.iter().max().unwrap()
+        let mut res = *mincost.iter().max().unwrap();
+        // let mut res = 0;
+        let inv_a = perm_inv(a);
+        for (itt, stay) in stay_blocks.iter().enumerate() {
+            let mut cur = usize::MAX;
+            for who in stay.who.iter() {
+                let pos: Vec<_> = who.iter().map(|&x| inv_a[x]).collect();
+                cur = cur.min(stay.dist[&pos]);
+                cur = cur.min(*stay.dist.get(&vec![pos[1], pos[0]]).unwrap_or(&usize::MAX));
+            }
+            res = res.max(cur);
+        }
+        res
     };
     let at_least_dist = esimate_dist(&state);
     eprintln!("AT LEAST DIST: {at_least_dist}");
@@ -416,7 +478,14 @@ pub fn step_3(
     for maxdist in 1.. {
         eprintln!("CUR MAXDIST: {maxdist}");
         let mut now_state = state;
-        if dfs(maxdist, &mut now_state, prev_moves, &esimate_dist) {
+        let mut iter = 0;
+        if dfs(
+            maxdist,
+            &mut now_state,
+            prev_moves,
+            &esimate_dist,
+            &mut iter,
+        ) {
             eprintln!("FOUND!");
             state = now_state;
             break;

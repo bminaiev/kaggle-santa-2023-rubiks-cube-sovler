@@ -79,3 +79,11 @@ pub fn get_all_perms(a: &[usize]) -> Vec<Vec<usize>> {
     }
     res
 }
+
+pub fn perm_inv(a: &[usize]) -> Vec<usize> {
+    let mut res = vec![0; a.len()];
+    for (i, &x) in a.iter().enumerate() {
+        res[x] = i;
+    }
+    res
+}
