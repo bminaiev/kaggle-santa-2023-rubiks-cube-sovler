@@ -14,6 +14,7 @@ use crate::{
     permutation::Permutation,
     puzzle::Puzzle,
     puzzle_type::PuzzleType,
+    solve_globe::solve_globe,
     solver3::solve,
     solver4::solve4,
     solver_nnn::solve_nnn,
@@ -28,6 +29,7 @@ pub mod permutation;
 pub mod puzzle;
 pub mod puzzle_type;
 pub mod sol_utils;
+pub mod solve_globe;
 pub mod solver3;
 pub mod solver4;
 pub mod solver_nnn;
@@ -133,6 +135,12 @@ fn show_info(data: &Data) {
     sorted_test_ids.reverse();
 
     let mut sum_lens = 0;
+
+    let mut by_name = HashMap::new();
+    by_name.insert("cube", 0);
+    by_name.insert("globe", 0);
+    by_name.insert("wreath", 0);
+
     for puzzle_id in sorted_test_ids[..].iter() {
         let puzzle = &puzzles[*puzzle_id];
         let sol = &solutions[&puzzle.id];
@@ -145,9 +153,17 @@ fn show_info(data: &Data) {
             puzzle.num_colors
         );
         sum_lens += sol.len();
-        check_solution3(puzzle, sol, &puzzle_info);
+        for (k, v) in by_name.iter_mut() {
+            if puzzle.puzzle_type.contains(k) {
+                *v += sol.len();
+            }
+        }
+        // check_solution3(puzzle, sol, &puzzle_info);
     }
     println!("Total len: {}", sum_lens);
+    for (k, v) in by_name.iter() {
+        println!("{}: {}", k, v);
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -429,6 +445,25 @@ fn analyze_permuations(data: &Data) {
     }
 }
 
+fn show_globe(data: &Data) {
+    let task_type = "globe_3/33";
+    let puzzle_info = &data.puzzle_info[&task_type.to_string()];
+    for (k, v) in puzzle_info.moves.iter() {
+        println!("{}: {:?}", k, v.cycles);
+    }
+    for task in data.puzzles.iter() {
+        if task.puzzle_type == task_type {
+            for r in 0..4 {
+                for c in 0..66 {
+                    print!("{}", task.color_names[task.initial_state[r * 66 + c]]);
+                }
+                println!()
+            }
+            println!()
+        }
+    }
+}
+
 fn main() {
     println!("Hello, world!");
 
@@ -439,5 +474,8 @@ fn main() {
 
     // show_info(&data);
     // solve4(&data, "cube_4/4/4");
-    solve_nnn(&data, "cube_19/19/19");
+    // solve_nnn(&data, "cube_5/5/5");
+
+    // show_globe(&data);
+    solve_globe(&data, "globe_3/33");
 }
