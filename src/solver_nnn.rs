@@ -1,8 +1,18 @@
-use std::{collections::BTreeSet, ops::Sub};
+use std::{
+    collections::{BTreeSet, HashSet},
+    ops::Sub,
+};
+
+use rand::seq::SliceRandom;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
-    data::Data, moves::SeveralMoves, permutation::Permutation, puzzle::Puzzle,
-    puzzle_type::PuzzleType, sol_utils::TaskSolution,
+    data::Data,
+    moves::{rev_move, SeveralMoves},
+    permutation::Permutation,
+    puzzle::Puzzle,
+    puzzle_type::PuzzleType,
+    sol_utils::TaskSolution,
 };
 
 fn build_square(sz: usize, offset: usize) -> Vec<Vec<usize>> {
@@ -287,6 +297,19 @@ pub fn solve_subproblem00(
     }
 }
 
+fn get_side_moves(sz: usize) -> Vec<String> {
+    let mut res = vec![];
+    for sign in ["", "-"] {
+        for mv in ["d", "f", "r"] {
+            for x in [0, sz - 1].iter() {
+                let name = format!("{sign}{mv}{x}");
+                res.push(name);
+            }
+        }
+    }
+    res
+}
+
 pub fn solve_nnn(data: &Data, task_type: &str) {
     println!("Solving nnn: {task_type}");
 
@@ -346,11 +369,25 @@ pub fn solve_nnn(data: &Data, task_type: &str) {
         }
     };
 
-    // solve_subproblem(&mut solutions, puzzle_info, &squares, 0, 0);
+    // 6 -> 32
+    // let moves = ["r3", "-d32", "-r31", "d32", "-r3", "-d32", "r31", "d32"];
+    // let mut perm = Permutation::identity();
+
+    // for mv in moves.iter() {
+    //     perm = perm.combine(&puzzle_info.moves[&mv.to_string()]);
+    // }
+    // eprintln!("Perm: {:?}", perm);
+
+    // for cycle in perm.cycles.iter() {
+    //     eprintln!("Cycle: {cycle:?}");
+    //     show_ids(cycle);
+    // }
+
+    solve_subproblem(&mut solutions, puzzle_info, &squares, 0, 0);
     // solve_subproblem(&mut solutions, puzzle_info, &squares, 0, sz / 2);
 
     for d in 0..2 {
-        solve_subproblem(&mut solutions, puzzle_info, &squares, 0, d);
+        // solve_subproblem(&mut solutions, puzzle_info, &squares, 0, d);
         // for sol in solutions.iter() {
         //     sol.print(data);
         // }
@@ -358,8 +395,117 @@ pub fn solve_nnn(data: &Data, task_type: &str) {
     // solve_subproblem(&mut solutions, puzzle_info, &squares, 0, 1);
     // solve_subproblem(&mut solutions, puzzle_info, &squares, 0, 2);
 
-    for sol in solutions.iter() {
+    // for sol in solutions.iter() {
+    //     sol.print(data);
+    //     show_ids(&solutions[0].get_correct_colors_positions());
+    // }
+
+    let side_moves = get_side_moves(sz);
+    let mut sz = 0;
+    let mut it = 0;
+
+    let mut hs = HashSet::new();
+    let mut moves = vec![];
+
+    let keys = puzzle_info.moves.keys().collect::<Vec<_>>();
+
+    let mut rng = rand::thread_rng();
+
+    let par_maps: Vec<_> = keys
+        .par_iter()
+        .map(|mv1| {
+            let mut moves = vec![];
+            for mv2 in puzzle_info.moves.keys() {
+                for side_mv in side_moves.iter() {
+                    let check = [
+                        mv1,
+                        side_mv,
+                        mv2,
+                        &rev_move(side_mv),
+                        &rev_move(mv1),
+                        side_mv,
+                        &rev_move(mv2),
+                        &rev_move(side_mv),
+                    ];
+                    let mut perm = Permutation::identity();
+                    for mv in check.iter() {
+                        // eprintln!(
+                        //     "Combiningin: {perm:?}, {:?}",
+                        //     &puzzle_info.moves[&mv.to_string()]
+                        // );
+                        let check_perm = perm.combine_linear(&puzzle_info.moves[&mv.to_string()]);
+                        // perm = perm.combine(&puzzle_info.moves[&mv.to_string()]);
+                        // assert_eq!(check_perm, perm);
+                        perm = check_perm;
+                    }
+                    if perm.cycles.len() == 1 {
+                        // eprintln!("Found: {perm:?}");
+                        // eprintln!("{mv1} {mv2} {side_mv}");
+                        moves.push(SeveralMoves {
+                            name: check.iter().map(|&x| x.to_string()).collect(),
+                            permutation: perm,
+                        });
+                    }
+                }
+            }
+            moves
+        })
+        .collect();
+    for mv in par_maps.iter() {
+        for mv in mv.iter() {
+            if hs.insert(mv.permutation.cycles.clone()) {
+                moves.push(mv.clone());
+            }
+        }
+    }
+    eprintln!("sz={sz}. hm={}", hs.len());
+    for sol in solutions.iter_mut() {
+        for side_mv_iter in 0..1 {
+            loop {
+                let mut changed = false;
+                for delta in (1..=3).rev() {
+                    for mv in moves.iter() {
+                        let mut cur_cnt_ok = 0;
+                        for &cell_id in mv.permutation.cycles[0].iter() {
+                            // if sol.task.solution_state[sol.state[cell_id]]
+                            //     == sol.task.solution_state[cell_id]
+                            // {
+                            //     cur_cnt_ok += 1;
+                            // }
+                            if sol.state[cell_id] == cell_id {
+                                cur_cnt_ok += 1;
+                            }
+                        }
+                        mv.permutation.apply(&mut sol.state);
+                        let mut next_cnt_ok = 0;
+                        for &cell_id in mv.permutation.cycles[0].iter() {
+                            if sol.state[cell_id] == cell_id {
+                                next_cnt_ok += 1;
+                            }
+                        }
+                        // eprintln!("cur_cnt_ok={cur_cnt_ok}, next_cnt_ok={next_cnt_ok}");
+                        if next_cnt_ok >= cur_cnt_ok + delta {
+                            changed = true;
+                            eprintln!("Changed!");
+                            sol.answer.extend(mv.name.iter().cloned());
+                            break;
+                        } else {
+                            mv.permutation.apply_rev(&mut sol.state);
+                        }
+                    }
+                    if changed {
+                        break;
+                    }
+                }
+                if !changed {
+                    break;
+                }
+            }
+            // let side_mv = side_moves.choose(&mut rng).unwrap();
+            // sol.answer.push(side_mv.to_string());
+            // puzzle_info.moves[side_mv].apply(&mut sol.state);
+        }
         sol.print(data);
-        show_ids(&solutions[0].get_correct_colors_positions());
+        show_ids(&sol.get_correct_colors_positions());
     }
 }

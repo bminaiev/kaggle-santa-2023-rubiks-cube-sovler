@@ -169,12 +169,16 @@ fn dfs(
     answer: &mut Vec<String>,
     base_score: usize,
     it: usize,
+    more_cycles: i32,
 ) -> bool {
     if more_moves == 0 {
         return false;
     }
     if it < state.n_rows {
         for dx in -more_moves..=more_moves {
+            if it == 0 && dx != 0 {
+                continue;
+            }
             let mv_name = if dx < 0 {
                 format!("-r{it}")
             } else {
@@ -184,7 +188,15 @@ fn dfs(
                 state.puzzle_type.moves[&mv_name].apply(a);
                 answer.push(mv_name.clone());
             }
-            if dfs(state, more_moves - dx.abs(), a, answer, base_score, it + 1) {
+            if dfs(
+                state,
+                more_moves - dx.abs(),
+                a,
+                answer,
+                base_score,
+                it + 1,
+                more_cycles,
+            ) {
                 return true;
             }
             for _ in 0..dx.abs() {
@@ -201,9 +213,19 @@ fn dfs(
             if score > base_score {
                 return true;
             }
-            // if dfs(state, more_moves - 1, a, answer, base_score, 0) {
-            //     return true;
-            // }
+            if more_cycles > 1 {
+                if dfs(
+                    state,
+                    more_moves - 1,
+                    a,
+                    answer,
+                    base_score,
+                    0,
+                    more_cycles - 1,
+                ) {
+                    return true;
+                }
+            }
             state.puzzle_type.moves[&mv_name].apply_rev(a);
             answer.pop();
         }
@@ -237,17 +259,25 @@ pub fn solve_globe(data: &Data, task_type: &str) {
 
     for move_it in 0..250 {
         eprintln!("START {move_it}");
-        for more_moves in 1..30 {
-            eprintln!("Trying {more_moves} moves");
-            if dfs(
-                &state,
-                more_moves,
-                &mut sol.state,
-                &mut sol.answer,
-                start_score,
-                0,
-            ) {
-                eprintln!("FOUND in {more_moves} moves!");
+        for more_cycles in 1..=3 {
+            let mut found = false;
+            for more_moves in 1..30 {
+                eprintln!("Trying {more_moves}x{more_cycles} moves");
+                if dfs(
+                    &state,
+                    more_moves,
+                    &mut sol.state,
+                    &mut sol.answer,
+                    start_score,
+                    0,
+                    more_cycles,
+                ) {
+                    found = true;
+                    eprintln!("FOUND in {more_moves} moves!");
+                    break;
+                }
+            }
+            if found {
                 break;
             }
         }

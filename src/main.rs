@@ -474,8 +474,8 @@ fn main() {
 
     // show_info(&data);
     // solve4(&data, "cube_4/4/4");
-    // solve_nnn(&data, "cube_5/5/5");
+    solve_nnn(&data, "cube_33/33/33");
 
     // show_globe(&data);
-    solve_globe(&data, "globe_3/33");
+    // solve_globe(&data, "globe_3/4");
 }

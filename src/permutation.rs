@@ -52,6 +52,33 @@ impl Permutation {
         }
     }
 
+    pub fn conv_to_array(&self, n: usize) -> Vec<usize> {
+        let mut a = vec![0; n];
+        for i in 0..n {
+            a[i] = i;
+        }
+        for cycle in self.cycles.iter() {
+            for i in 0..cycle.len() {
+                a[cycle[i]] = cycle[(i + 1) % cycle.len()];
+            }
+        }
+        a
+    }
+
+    pub fn combine_linear(&self, other: &Self) -> Self {
+        let mut n = 0;
+        for perm in [self, other].iter() {
+            for cycle in perm.cycles.iter() {
+                for x in cycle.iter() {
+                    n = n.max(*x);
+                }
+            }
+        }
+        let p1 = self.conv_to_array(n + 1);
+        let p2 = other.conv_to_array(n + 1);
+        Self::from_array(&p2.iter().map(|&x| p1[x]).collect::<Vec<_>>())
+    }
+
     pub fn combine(&self, other: &Self) -> Self {
         let mut a = HashMap::new();
         for who in [self, other].iter() {

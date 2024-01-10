@@ -1,6 +1,6 @@
 use crate::{permutation::Permutation, puzzle_type::PuzzleType};
 
-fn rev_move(s: &str) -> String {
+pub fn rev_move(s: &str) -> String {
     if s.starts_with('-') {
         s[1..].to_string()
     } else {
