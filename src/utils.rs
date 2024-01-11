@@ -87,3 +87,15 @@ pub fn perm_inv(a: &[usize]) -> Vec<usize> {
     }
     res
 }
+
+pub fn perm_parity(perm: &[usize]) -> usize {
+    let mut res = 0;
+    for i in 0..perm.len() {
+        for j in i + 1..perm.len() {
+            if perm[i] > perm[j] {
+                res += 1;
+            }
+        }
+    }
+    res % 2
+}

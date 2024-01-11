@@ -23,6 +23,7 @@ use crate::{
 
 pub mod checker;
 pub mod data;
+pub mod dsu;
 pub mod groups;
 pub mod moves;
 pub mod permutation;
@@ -33,6 +34,8 @@ pub mod solve_globe;
 pub mod solver3;
 pub mod solver4;
 pub mod solver_nnn;
+pub mod triangle_solver;
+pub mod triangles_parity;
 pub mod utils;
 
 fn calc_hash(a: &[usize]) -> u64 {

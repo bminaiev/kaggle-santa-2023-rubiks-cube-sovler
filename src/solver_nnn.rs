@@ -4,15 +4,21 @@ use std::{
 };
 
 use rand::seq::SliceRandom;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::{
+    iter::{IntoParallelRefIterator, ParallelIterator},
+    vec,
+};
 
 use crate::{
     data::Data,
+    dsu::Dsu,
     moves::{rev_move, SeveralMoves},
     permutation::Permutation,
     puzzle::Puzzle,
     puzzle_type::PuzzleType,
     sol_utils::TaskSolution,
+    triangle_solver::{solve_triangle, Triangle},
+    triangles_parity::triangle_parity_solver,
 };
 
 fn build_square(sz: usize, offset: usize) -> Vec<Vec<usize>> {
@@ -316,7 +322,7 @@ pub fn solve_nnn(data: &Data, task_type: &str) {
     let mut solutions = TaskSolution::all_by_type(data, task_type);
     eprintln!("Tasks cnt: {}", solutions.len());
     solutions.truncate(1);
-    let task_id = solutions[0].task_id;
+    // let task_id = solutions[0].task_id;
     // eprintln!("Solving id={task_id}");
 
     let puzzle_info = data.puzzle_info.get(task_type).unwrap();
@@ -383,7 +389,7 @@ pub fn solve_nnn(data: &Data, task_type: &str) {
     //     show_ids(cycle);
     // }
 
-    solve_subproblem(&mut solutions, puzzle_info, &squares, 0, 0);
+    // solve_subproblem(&mut solutions, puzzle_info, &squares, 0, 0);
     // solve_subproblem(&mut solutions, puzzle_info, &squares, 0, sz / 2);
 
     for d in 0..2 {
@@ -392,7 +398,9 @@ pub fn solve_nnn(data: &Data, task_type: &str) {
         //     sol.print(data);
         // }
     }
-    // solve_subproblem(&mut solutions, puzzle_info, &squares, 0, 1);
+    if sz % 2 == 1 {
+        solve_subproblem(&mut solutions, puzzle_info, &squares, 0, 0);
+    }
     // solve_subproblem(&mut solutions, puzzle_info, &squares, 0, 2);
 
     // for sol in solutions.iter() {
@@ -401,7 +409,6 @@ pub fn solve_nnn(data: &Data, task_type: &str) {
     // }
 
     let side_moves = get_side_moves(sz);
-    let mut sz = 0;
     let mut it = 0;
 
     let mut hs = HashSet::new();
@@ -411,12 +418,29 @@ pub fn solve_nnn(data: &Data, task_type: &str) {
 
     let mut rng = rand::thread_rng();
 
+    let mv_side = |mv: &str| -> String {
+        if mv.starts_with('-') {
+            mv[1..2].to_string()
+        } else {
+            mv[0..1].to_string()
+        }
+    };
+
     let par_maps: Vec<_> = keys
         .par_iter()
-        .map(|mv1| {
+        .map(|&mv1| {
+            if side_moves.contains(&mv1.to_string()) {
+                return vec![];
+            }
             let mut moves = vec![];
             for mv2 in puzzle_info.moves.keys() {
+                if side_moves.contains(&mv2.to_string()) {
+                    continue;
+                }
                 for side_mv in side_moves.iter() {
+                    if mv_side(mv1) == mv_side(side_mv) || mv_side(mv2) == mv_side(side_mv) {
+                        continue;
+                    }
                     let check = [
                         mv1,
                         side_mv,
@@ -441,9 +465,12 @@ pub fn solve_nnn(data: &Data, task_type: &str) {
                     if perm.cycles.len() == 1 {
                         // eprintln!("Found: {perm:?}");
                         // eprintln!("{mv1} {mv2} {side_mv}");
-                        moves.push(SeveralMoves {
-                            name: check.iter().map(|&x| x.to_string()).collect(),
-                            permutation: perm,
+                        moves.push(Triangle {
+                            mv: SeveralMoves {
+                                name: check.iter().map(|&x| x.to_string()).collect(),
+                                permutation: perm,
+                            },
+                            info: vec![mv1.clone(), mv2.clone(), side_mv.clone()],
                         });
                     }
                 }
@@ -451,60 +478,122 @@ pub fn solve_nnn(data: &Data, task_type: &str) {
             moves
         })
         .collect();
-    for mv in par_maps.iter() {
-        for mv in mv.iter() {
-            if hs.insert(mv.permutation.cycles.clone()) {
-                moves.push(mv.clone());
-            }
+    let mut dsu = Dsu::new(n);
+    let par_maps: Vec<_> = par_maps.into_iter().flatten().collect();
+    for tr in par_maps.iter() {
+        for w in tr.mv.permutation.cycles[0].windows(2) {
+            dsu.unite(w[0], w[1]);
         }
     }
-    eprintln!("sz={sz}. hm={}", hs.len());
+    let mut triangles_by_dsu = vec![vec![]; n];
+    for tr in par_maps.iter() {
+        let id = dsu.get(tr.mv.permutation.cycles[0][0]);
+        triangles_by_dsu[id].push(tr.clone());
+    }
+
+    for tr in par_maps.iter() {
+        if hs.insert(tr.mv.permutation.cycles.clone()) {
+            // eprintln!("Permutation: {:?}. {info:?}", mv.permutation);
+            moves.push(tr.mv.clone());
+        }
+    }
+    eprintln!("hm={}", hs.len());
     for sol in solutions.iter_mut() {
-        for side_mv_iter in 0..1 {
-            loop {
-                let mut changed = false;
-                for delta in (1..=3).rev() {
-                    for mv in moves.iter() {
-                        let mut cur_cnt_ok = 0;
-                        for &cell_id in mv.permutation.cycles[0].iter() {
-                            // if sol.task.solution_state[sol.state[cell_id]]
-                            //     == sol.task.solution_state[cell_id]
-                            // {
-                            //     cur_cnt_ok += 1;
-                            // }
-                            if sol.state[cell_id] == cell_id {
-                                cur_cnt_ok += 1;
-                            }
-                        }
-                        mv.permutation.apply(&mut sol.state);
-                        let mut next_cnt_ok = 0;
-                        for &cell_id in mv.permutation.cycles[0].iter() {
-                            if sol.state[cell_id] == cell_id {
-                                next_cnt_ok += 1;
-                            }
-                        }
-                        // eprintln!("cur_cnt_ok={cur_cnt_ok}, next_cnt_ok={next_cnt_ok}");
-                        if next_cnt_ok >= cur_cnt_ok + delta {
-                            changed = true;
-                            eprintln!("Changed!");
+        // eprintln!("State: {:?}", sol.state);
+        let need_moves = triangle_parity_solver(&sol.state, dsu.get_groups(), sol, sz);
+        for mv in need_moves.iter() {
+            // eprintln!("Need move: {:?}", mv.name);
+            puzzle_info.moves[mv].apply(&mut sol.state);
+            sol.answer.push(mv.to_string());
+        }
+
+        for triangles in triangles_by_dsu.iter() {
+            if !triangles.is_empty() {
+                match solve_triangle(&sol.state, triangles) {
+                    None => unreachable!(),
+                    Some(moves) => {
+                        eprintln!("Need {} moves", moves.len());
+                        for &mv in moves.iter() {
+                            let mv = &triangles[mv].mv;
+                            mv.permutation.apply(&mut sol.state);
                             sol.answer.extend(mv.name.iter().cloned());
-                            break;
-                        } else {
-                            mv.permutation.apply_rev(&mut sol.state);
                         }
                     }
-                    if changed {
-                        break;
-                    }
-                }
-                if !changed {
-                    break;
                 }
             }
-            // let side_mv = side_moves.choose(&mut rng).unwrap();
-            // sol.answer.push(side_mv.to_string());
-            // puzzle_info.moves[side_mv].apply(&mut sol.state);
         }
+        eprintln!("OK! {}", sol.task_id);
+
+        // let mut all_masks: Vec<_> = (0..128usize).collect();
+        // all_masks.sort_by_key(|m| m.count_ones());
+        // for mask in all_masks.into_iter() {
+        //     let mut all_ok = true;
+        //     let mut state = sol.state.clone();
+        //     for (i, c) in ["f1", "r1", "d1", "f0", "r0", "d0"].iter().enumerate() {
+        //         if mask & (1 << i) != 0 {
+        //             puzzle_info.moves[&c.to_string()].apply(&mut state);
+        //         }
+        //     }
+        //     let mut zz = vec![];
+        //     for triangles in triangles_by_dsu.iter() {
+        //         if !triangles.is_empty() {
+        //             zz.push(.is_none());
+        //         }
+        //     }
+
+        //     eprintln!("{mask} -> {zz:?}");
+        //     // if all_ok {
+        //     //     eprintln!("All ok!");
+        //     // } else {
+        //     //     eprintln!("Not all ok!");
+        //     // }
+        // }
+        // for side_mv_iter in 0..1 {
+        //     loop {
+        //         let mut changed = false;
+        //         for delta in (1..=3).rev() {
+        //             for mv in moves.iter() {
+        //                 let mut cur_cnt_ok = 0;
+        //                 for &cell_id in mv.permutation.cycles[0].iter() {
+        //                     // if sol.task.solution_state[sol.state[cell_id]]
+        //                     //     == sol.task.solution_state[cell_id]
+        //                     // {
+        //                     //     cur_cnt_ok += 1;
+        //                     // }
+        //                     if sol.state[cell_id] == cell_id {
+        //                         cur_cnt_ok += 1;
+        //                     }
+        //                 }
+        //                 mv.permutation.apply(&mut sol.state);
+        //                 let mut next_cnt_ok = 0;
+        //                 for &cell_id in mv.permutation.cycles[0].iter() {
+        //                     if sol.state[cell_id] == cell_id {
+        //                         next_cnt_ok += 1;
+        //                     }
+        //                 }
+        //                 // eprintln!("cur_cnt_ok={cur_cnt_ok}, next_cnt_ok={next_cnt_ok}");
+        //                 if next_cnt_ok >= cur_cnt_ok + delta {
+        //                     changed = true;
+        //                     // eprintln!("Changed!");
+        //                     sol.answer.extend(mv.name.iter().cloned());
+        //                     break;
+        //                 } else {
+        //                     mv.permutation.apply_rev(&mut sol.state);
+        //                 }
+        //             }
+        //             if changed {
+        //                 break;
+        //             }
+        //         }
+        //         if !changed {
+        //             break;
+        //         }
+        //     }
+        //     // let side_mv = side_moves.choose(&mut rng).unwrap();
+        //     // sol.answer.push(side_mv.to_string());
+        //     // puzzle_info.moves[side_mv].apply(&mut sol.state);
+        // }
+
         sol.print(data);
         show_ids(&sol.get_correct_colors_positions());
     }
