@@ -99,3 +99,24 @@ pub fn perm_parity(perm: &[usize]) -> usize {
     }
     res % 2
 }
+
+pub fn calc_cube_side_size(n: usize) -> usize {
+    let mut sz = 1;
+    while 6 * sz * sz < n {
+        sz += 1;
+    }
+    sz
+}
+
+pub fn get_cube_side_moves(sz: usize) -> Vec<String> {
+    let mut res = vec![];
+    for sign in ["", "-"] {
+        for mv in ["d", "f", "r"] {
+            for x in [0, sz - 1].iter() {
+                let name = format!("{sign}{mv}{x}");
+                res.push(name);
+            }
+        }
+    }
+    res
+}

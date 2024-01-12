@@ -10,8 +10,10 @@ use rayon::{
 };
 
 use crate::{
+    cube_edges_calculator::{build_squares, calc_cube_centers, calc_cube_edges, calc_edges_score},
     data::Data,
     dsu::Dsu,
+    edge_solver::solve_edges,
     moves::{rev_move, SeveralMoves},
     permutation::Permutation,
     puzzle::Puzzle,
@@ -19,17 +21,8 @@ use crate::{
     sol_utils::TaskSolution,
     triangle_solver::{solve_triangle, Triangle},
     triangles_parity::triangle_parity_solver,
+    utils::{calc_cube_side_size, get_cube_side_moves},
 };
-
-fn build_square(sz: usize, offset: usize) -> Vec<Vec<usize>> {
-    let mut res = vec![vec![0; sz]; sz];
-    for r in 0..sz {
-        for c in 0..sz {
-            res[r][c] = offset + r * sz + c;
-        }
-    }
-    res
-}
 
 struct Subspace {
     interesting_positions: Vec<usize>,
@@ -303,19 +296,6 @@ pub fn solve_subproblem00(
     }
 }
 
-fn get_side_moves(sz: usize) -> Vec<String> {
-    let mut res = vec![];
-    for sign in ["", "-"] {
-        for mv in ["d", "f", "r"] {
-            for x in [0, sz - 1].iter() {
-                let name = format!("{sign}{mv}{x}");
-                res.push(name);
-            }
-        }
-    }
-    res
-}
-
 pub fn solve_nnn(data: &Data, task_type: &str) {
     println!("Solving nnn: {task_type}");
 
@@ -329,18 +309,9 @@ pub fn solve_nnn(data: &Data, task_type: &str) {
 
     let n = puzzle_info.n;
     eprintln!("n={n}");
-    let sz = {
-        let mut sz = 1;
-        while 6 * sz * sz < n {
-            sz += 1;
-        }
-        sz
-    };
-    eprintln!("sz={sz}");
+    let sz = calc_cube_side_size(n);
 
-    let squares: Vec<_> = (0..6)
-        .map(|i| build_square(sz, i * sz * sz))
-        .collect::<Vec<_>>();
+    let squares = build_squares(sz);
 
     let show_ids = |a: &[usize]| {
         for line in [vec![0], vec![4, 1, 2, 3], vec![5]].iter() {
@@ -376,7 +347,7 @@ pub fn solve_nnn(data: &Data, task_type: &str) {
     };
 
     // 6 -> 32
-    // let moves = ["r3", "-d32", "-r31", "d32", "-r3", "-d32", "r31", "d32"];
+    // let moves = ["r2", "-f6", "r0", "f6", "-r2", "-r0"];
     // let mut perm = Permutation::identity();
 
     // for mv in moves.iter() {
@@ -408,7 +379,7 @@ pub fn solve_nnn(data: &Data, task_type: &str) {
     //     show_ids(&solutions[0].get_correct_colors_positions());
     // }
 
-    let side_moves = get_side_moves(sz);
+    let side_moves = get_cube_side_moves(sz);
     let mut it = 0;
 
     let mut hs = HashSet::new();
@@ -497,6 +468,9 @@ pub fn solve_nnn(data: &Data, task_type: &str) {
             moves.push(tr.mv.clone());
         }
     }
+
+    let cube_centers = calc_cube_centers(&squares);
+
     eprintln!("hm={}", hs.len());
     for sol in solutions.iter_mut() {
         // eprintln!("State: {:?}", sol.state);
@@ -593,6 +567,8 @@ pub fn solve_nnn(data: &Data, task_type: &str) {
         //     // sol.answer.push(side_mv.to_string());
         //     // puzzle_info.moves[side_mv].apply(&mut sol.state);
         // }
+
+        solve_edges(sol);
 
         sol.print(data);
         show_ids(&sol.get_correct_colors_positions());

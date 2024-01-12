@@ -22,8 +22,10 @@ use crate::{
 };
 
 pub mod checker;
+pub mod cube_edges_calculator;
 pub mod data;
 pub mod dsu;
+pub mod edge_solver;
 pub mod groups;
 pub mod moves;
 pub mod permutation;
