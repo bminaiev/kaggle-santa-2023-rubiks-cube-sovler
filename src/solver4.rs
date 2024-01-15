@@ -7,7 +7,7 @@ use crate::{
     data::Data,
     groups::{
         apply_precomputed_moves, apply_precomputed_moves_bfs, blocks_bfs, get_groups,
-        precompute_moves, precompute_moves_from_final_state, PREC_LIMIT,
+        precompute_moves, PREC_LIMIT,
     },
     moves::{create_moves, SeveralMoves},
     puzzle::Puzzle,
@@ -578,7 +578,13 @@ pub fn solve4(data: &Data, task_type: &str) {
                 eprintln!("Group {i}: {:?}", group);
             }
             let mut calc_hash = |a: &[usize], debug: bool| groups.hash(a).finish();
-            let prec = precompute_moves(puzzle_info.n, &move_groups[step], &mut calc_hash, 500_000);
+            let prec = precompute_moves(
+                puzzle_info.n,
+                &move_groups[step],
+                &mut calc_hash,
+                500_000,
+                false,
+            );
             for sol in solutions.iter_mut() {
                 if sol.failed_on_stage.is_some() {
                     continue;

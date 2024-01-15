@@ -1,10 +1,13 @@
 use std::{
     collections::{hash_map::DefaultHasher, HashMap, VecDeque},
-    f32::consts::E,
     hash::Hasher,
 };
 
-use crate::{moves::SeveralMoves, utils::get_all_perms};
+use crate::{
+    moves::SeveralMoves,
+    rotations::{apply_rotations, apply_rotations_rev, conv_rotations},
+    utils::get_all_perms,
+};
 
 pub struct Groups {
     pub groups: Vec<Vec<Vec<usize>>>,
@@ -95,18 +98,33 @@ pub struct Edge {
     pub len: usize,
 }
 
-pub const PREC_LIMIT: usize = 10_000_000;
+pub const PREC_LIMIT: usize = 100_000_000;
 
-pub fn precompute_moves_from_final_state<'a>(
-    n: usize,
-    moves: &'a [SeveralMoves],
-    get_state: &mut impl FnMut(&[usize], bool) -> u64,
+fn join_hash(a: u64, b: usize) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    hasher.write_u64(a);
+    hasher.write_usize(b);
+    hasher.finish()
+}
+
+pub fn precompute_moves_from_final_state(
+    moves: &[SeveralMoves],
+    get_state: &impl Fn(&[usize], bool) -> u64,
     limit: usize,
     final_state: Vec<usize>,
+    include_rotations: bool,
 ) -> HashMap<u64, Edge> {
-    let hash = get_state(&final_state, false);
+    let get_state = |a: &[usize], rot: usize| {
+        let mut hash = get_state(a, false);
+        if include_rotations {
+            hash = join_hash(hash, rot);
+        }
+        hash
+    };
+
+    let hash = get_state(&final_state, 0);
     let mut queues = vec![Vec::new(); 50];
-    queues[0].push(final_state);
+    queues[0].push((final_state, 0));
     let mut res = HashMap::new();
     res.insert(
         hash,
@@ -119,7 +137,7 @@ pub fn precompute_moves_from_final_state<'a>(
     let mut it = 0;
     for cur_d in 0..queues.len() {
         eprintln!("cur_d: {cur_d}. it = {it}");
-        while let Some(state) = queues[cur_d].pop() {
+        while let Some((state, rot)) = queues[cur_d].pop() {
             it += 1;
             if it % 100_000 == 0 {
                 eprintln!("it: {}", it);
@@ -128,11 +146,12 @@ pub fn precompute_moves_from_final_state<'a>(
                 eprintln!("LIMIT {limit} REACHED");
                 return res;
             }
-            let cur_hash = get_state(&state, false);
+            let cur_hash = get_state(&state, rot);
             for (mov_idx, mov) in moves.iter().enumerate() {
                 let mut new_state = state.clone();
                 mov.permutation.apply_rev(&mut new_state);
-                let hash = get_state(&new_state, false);
+                let new_rot = apply_rotations_rev(rot, mov);
+                let hash = get_state(&new_state, new_rot);
                 let len = cur_d + mov.name.len();
                 let should_add = match res.get(&hash) {
                     None => true,
@@ -147,7 +166,7 @@ pub fn precompute_moves_from_final_state<'a>(
                             len,
                         },
                     );
-                    queues[len].push(new_state);
+                    queues[len].push((new_state, new_rot));
                 }
             }
         }
@@ -159,10 +178,11 @@ pub fn precompute_moves_from_final_state<'a>(
 pub fn precompute_moves(
     n: usize,
     moves: &[SeveralMoves],
-    get_state: &mut impl FnMut(&[usize], bool) -> u64,
+    get_state: &mut impl Fn(&[usize], bool) -> u64,
     limit: usize,
+    include_rotations: bool,
 ) -> HashMap<u64, Edge> {
-    precompute_moves_from_final_state(n, moves, get_state, limit, (0..n).collect())
+    precompute_moves_from_final_state(moves, get_state, limit, (0..n).collect(), include_rotations)
 }
 
 pub fn apply_precomputed_moves(
@@ -171,17 +191,34 @@ pub fn apply_precomputed_moves(
     get_state: impl Fn(&[usize], bool) -> u64,
     answer: &mut Vec<String>,
     possible_moves: &[SeveralMoves],
+    mut cur_rot: Option<usize>,
 ) -> bool {
     let mut cur_hash = get_state(state, false);
+    if let Some(cur_rot) = cur_rot {
+        cur_hash = join_hash(cur_hash, cur_rot);
+    }
+    eprintln!("Start rot: {cur_rot:?}. Start hash: {cur_hash}");
     while let Some(edge) = prec.get(&cur_hash) {
         if edge.mov_idx == usize::MAX {
             return true;
         }
         let mov = &possible_moves[edge.mov_idx];
         mov.permutation.apply(state);
+        if let Some(cur_rot) = &mut cur_rot {
+            *cur_rot = apply_rotations(*cur_rot, mov);
+        }
         answer.extend(mov.name.clone());
         cur_hash = edge.next_state_hash;
-        assert_eq!(cur_hash, get_state(state, false));
+        let mut real_state_hash = get_state(state, false);
+        if let Some(cur_rot) = cur_rot {
+            real_state_hash = join_hash(real_state_hash, cur_rot);
+            eprintln!(
+                "Apply move... New rot: {cur_rot}. Moves: {:?}. Rot: {:?}",
+                mov.name,
+                conv_rotations(cur_rot)
+            );
+        }
+        assert_eq!(cur_hash, real_state_hash);
     }
     false
 }
@@ -239,7 +276,8 @@ pub fn apply_precomputed_moves_bfs(
                         prec,
                         &get_state,
                         answer,
-                        moves
+                        moves,
+                        None
                     ));
                     let st1 = get_state(&(0..start_state.len()).collect::<Vec<_>>(), true);
                     let st2 = get_state(start_state, true);

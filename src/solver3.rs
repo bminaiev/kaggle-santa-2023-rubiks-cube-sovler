@@ -10,7 +10,7 @@ use crate::{
     groups::{apply_precomputed_moves, get_groups, precompute_moves, Edge, Groups, PREC_LIMIT},
     moves::{create_moves, SeveralMoves},
     puzzle_type::PuzzleType,
-    rotations::{apply_rotation, apply_rotations, get_rotations_dists},
+    rotations::{apply_rotation, apply_rotations, conv_rotations, get_rotations_dists},
     sol_utils::TaskSolution,
     utils::{get_all_perms, get_blocks, get_start_permutation},
 };
@@ -84,7 +84,11 @@ impl Solver3 {
         let precalcs: Vec<_> = (0..res.move_groups.len() - 1)
             .into_par_iter()
             .map(|step| {
-                let precalc_file = format!("precalcs/{step}.txt");
+                let include_rotations = step == 4;
+                let precalc_file = format!(
+                    "precalcs/{step}{}.txt",
+                    if include_rotations { "-rot" } else { "" }
+                );
                 if std::path::Path::new(&precalc_file).exists() {
                     eprintln!("Loading precalc from {}", precalc_file);
                     let mut precalc = HashMap::new();
@@ -115,6 +119,7 @@ impl Solver3 {
                     &res.move_groups[step],
                     &mut calc_hash,
                     PREC_LIMIT,
+                    include_rotations,
                 );
 
                 {
@@ -162,6 +167,7 @@ impl Solver3 {
                 |a, _debug| self.calc_hash(step, a),
                 &mut task.answer,
                 &self.move_groups[step],
+                None,
             );
             assert!(res);
         }
@@ -183,7 +189,10 @@ impl Solver3 {
             return false;
         }
         if edge.len == 0 && rotation_dists[rot] == 0 {
-            eprintln!("Solution finished with rot: {rot}");
+            eprintln!(
+                "Solution finished with rot: {rot}. {:?}",
+                conv_rotations(rot)
+            );
             return true;
         }
         for mv in self.move_groups[step].iter() {
@@ -213,6 +222,18 @@ impl Solver3 {
     pub fn solve_task_with_rotations(&self, task: &mut TaskSolution) {
         let mut rot = 0;
         for step in 0..self.precalcs.len() {
+            if step == 4 {
+                let res = apply_precomputed_moves(
+                    &mut task.state,
+                    &self.precalcs[step],
+                    |a, _debug| self.calc_hash(step, a),
+                    &mut task.answer,
+                    &self.move_groups[step],
+                    Some(rot),
+                );
+                assert!(res);
+                continue;
+            }
             let rotation_dists =
                 get_rotations_dists(&self.move_groups[step], &self.move_groups[step + 1]);
             for sol_len in 0.. {
@@ -224,13 +245,12 @@ impl Solver3 {
                     for mv in answer.iter() {
                         task.answer.push(mv.clone());
                         task.task.info.moves[mv].apply(&mut task.state);
-                        rot = apply_rotation(rot, mv);
+                        rot = apply_rotation(rot, mv, false);
                     }
                     break;
                 }
             }
         }
-        assert_eq!(rot, 0);
     }
 }
 
