@@ -202,4 +202,30 @@ pub fn solve_edges(sol: &mut TaskSolution) {
             }
         }
     }
+
+    // TODO: only do this if needed
+    let cube_centers = calc_cube_centers(&squares);
+    for side_mv in side_moves.iter() {
+        for cnt in 1..=2 {
+            let cur_ok_centers = (0..cube_centers.len())
+                .filter(|&i| cube_centers[i] && sol.state[i] == i)
+                .count();
+            let mut new_state = sol.state.clone();
+            for _ in 0..cnt {
+                puzzle_info.moves[side_mv].apply(&mut new_state);
+            }
+            let new_ok_centers = (0..cube_centers.len())
+                .filter(|&i| cube_centers[i] && new_state[i] == i)
+                .count();
+            if new_ok_centers > cur_ok_centers {
+                for _ in 0..cnt {
+                    eprintln!(
+                        "Apply {side_mv}. centers improved: {cur_ok_centers} -> {new_ok_centers}"
+                    );
+                    sol.answer.push(side_mv.to_string());
+                    puzzle_info.moves[side_mv].apply(&mut sol.state);
+                }
+            }
+        }
+    }
 }

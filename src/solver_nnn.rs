@@ -569,6 +569,12 @@ pub fn solve_nnn(data: &Data, task_type: &str, cube3_converter: &Cube3Converter)
         //     // puzzle_info.moves[side_mv].apply(&mut sol.state);
         // }
 
+        eprintln!("Before solving edges...");
+
+        show_ids(&sol.get_correct_colors_positions());
+        eprintln!("IDS:");
+        show_ids(&sol.get_correct_positions());
+
         solve_edges(sol);
 
         sol.print(data);
