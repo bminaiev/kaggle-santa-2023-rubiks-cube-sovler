@@ -15,9 +15,10 @@ use crate::{
     puzzle::Puzzle,
     puzzle_type::PuzzleType,
     solve_globe::solve_globe,
-    solver3::solve,
+    solver3::{solve3, Solver3},
     solver4::solve4,
     solver_nnn::solve_nnn,
+    to_cube3_converter::Cube3Converter,
     utils::{get_all_perms, get_blocks},
 };
 
@@ -36,6 +37,7 @@ pub mod solve_globe;
 pub mod solver3;
 pub mod solver4;
 pub mod solver_nnn;
+pub mod to_cube3_converter;
 pub mod triangle_solver;
 pub mod triangles_parity;
 pub mod utils;
@@ -478,8 +480,10 @@ fn main() {
     // analyze_permuations(&data);
 
     // show_info(&data);
-    // solve4(&data, "cube_4/4/4");
-    solve_nnn(&data, "cube_33/33/33");
+    let cube3_converter = Cube3Converter::new(Solver3::new(&data));
+    solve_nnn(&data, "cube_33/33/33", &cube3_converter);
+
+    // solve3(&data, "cube_3/3/3");
 
     // show_globe(&data);
     // solve_globe(&data, "globe_3/4");

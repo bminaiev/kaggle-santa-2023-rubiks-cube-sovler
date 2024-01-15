@@ -19,6 +19,7 @@ use crate::{
     puzzle::Puzzle,
     puzzle_type::PuzzleType,
     sol_utils::TaskSolution,
+    to_cube3_converter::Cube3Converter,
     triangle_solver::{solve_triangle, Triangle},
     triangles_parity::triangle_parity_solver,
     utils::{calc_cube_side_size, get_cube_side_moves},
@@ -296,7 +297,7 @@ pub fn solve_subproblem00(
     }
 }
 
-pub fn solve_nnn(data: &Data, task_type: &str) {
+pub fn solve_nnn(data: &Data, task_type: &str, cube3_converter: &Cube3Converter) {
     println!("Solving nnn: {task_type}");
 
     let mut solutions = TaskSolution::all_by_type(data, task_type);
@@ -572,5 +573,12 @@ pub fn solve_nnn(data: &Data, task_type: &str) {
 
         sol.print(data);
         show_ids(&sol.get_correct_colors_positions());
+        eprintln!("IDS:");
+        show_ids(&sol.get_correct_positions());
+
+        cube3_converter.solve(data, sol);
+        sol.print(data);
+        show_ids(&sol.get_correct_colors_positions());
+        show_ids(&sol.get_correct_positions());
     }
 }

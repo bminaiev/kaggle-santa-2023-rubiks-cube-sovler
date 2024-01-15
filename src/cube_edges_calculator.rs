@@ -45,11 +45,8 @@ pub fn calc_cube_edges(squares: &[Vec<Vec<usize>>]) -> Vec<Vec<[usize; 2]>> {
                         let dist1 = dist_to_center(r, c);
                         let dist2 = dist_to_center(nr, nc);
                         for sq in squares.iter() {
-                            if dist1 < dist2 {
-                                res[dist1].push([sq[r][c], sq[nr][nc]]);
-                            } else {
-                                res[dist2].push([sq[nr][nc], sq[r][c]]);
-                            }
+                            let id = dist1.max(dist2) - (if n % 2 == 0 { 0 } else { 1 });
+                            res[id].push([sq[r][c], sq[nr][nc]]);
                         }
                     }
                 }

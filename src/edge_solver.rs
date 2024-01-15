@@ -1,4 +1,7 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    fmt::format,
+};
 
 use crate::{
     cube_edges_calculator::{build_squares, calc_cube_centers, calc_cube_edges, calc_edges_score},
@@ -7,6 +10,14 @@ use crate::{
     sol_utils::TaskSolution,
     utils::{calc_cube_side_size, get_cube_side_moves},
 };
+
+fn get_columns(sz: usize, delta: usize) -> [usize; 2] {
+    if sz % 2 == 1 {
+        [sz / 2 - delta, sz / 2 + 1 + delta]
+    } else {
+        [sz / 2 - delta - 1, sz / 2 + delta]
+    }
+}
 
 fn get_possible_moves(sol: &TaskSolution) -> Vec<Vec<SeveralMoves>> {
     let n = sol.task.info.n;
@@ -21,11 +32,7 @@ fn get_possible_moves(sol: &TaskSolution) -> Vec<Vec<SeveralMoves>> {
     let mut res = vec![vec![]; edges.len()];
 
     for delta in 0..res.len() {
-        let nums = if sz % 2 == 1 {
-            [sz / 2 - delta, sz / 2 + 1 + delta]
-        } else {
-            [sz / 2 - delta - 1, sz / 2 + delta]
-        };
+        let nums = get_columns(sz, delta);
         for &num in nums.iter() {
             for &side_1 in ["r", "f", "d"].iter() {
                 let mv1 = format!("{side_1}{num}");
@@ -76,6 +83,12 @@ pub fn solve_edges(sol: &mut TaskSolution) {
 
     let squares = build_squares(sz);
     let edges = calc_cube_edges(&squares);
+    for (lvl, edges) in edges.iter().enumerate() {
+        eprintln!("LVL: {lvl}");
+        for edge in edges.iter() {
+            eprintln!("  {:?}", edge);
+        }
+    }
     let puzzle_info = &sol.task.info;
 
     let side_moves = get_cube_side_moves(sz);
@@ -173,7 +186,19 @@ pub fn solve_edges(sol: &mut TaskSolution) {
                 }
             }
             if !found {
-                break;
+                eprintln!("FAILED TO FIND SOLUTION FOR LVL: {lvl}... Let's try to change parity..");
+                let nums = get_columns(sz, lvl);
+                let basic_block = vec!["d0".to_string(), "d0".to_string(), format!("r{}", nums[0])];
+                let moves = vec![basic_block; 5]
+                    .into_iter()
+                    .flatten()
+                    .collect::<Vec<_>>();
+                for mv in moves.iter() {
+                    sol.answer.push(mv.to_string());
+                    puzzle_info.moves[mv].apply(&mut sol.state);
+                }
+
+                // break;
             }
         }
     }

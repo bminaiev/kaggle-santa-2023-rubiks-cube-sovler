@@ -89,9 +89,9 @@ impl Groups {
 }
 
 #[derive(Clone)]
-pub struct Edge<'a> {
+pub struct Edge {
     pub next_state_hash: u64,
-    pub mov: Option<&'a SeveralMoves>,
+    pub mov_idx: usize,
     pub len: usize,
 }
 
@@ -103,7 +103,7 @@ pub fn precompute_moves_from_final_state<'a>(
     get_state: &mut impl FnMut(&[usize], bool) -> u64,
     limit: usize,
     final_state: Vec<usize>,
-) -> HashMap<u64, Edge<'a>> {
+) -> HashMap<u64, Edge> {
     let hash = get_state(&final_state, false);
     let mut queues = vec![Vec::new(); 50];
     queues[0].push(final_state);
@@ -112,7 +112,7 @@ pub fn precompute_moves_from_final_state<'a>(
         hash,
         Edge {
             next_state_hash: hash,
-            mov: None,
+            mov_idx: usize::MAX,
             len: 0,
         },
     );
@@ -129,7 +129,7 @@ pub fn precompute_moves_from_final_state<'a>(
                 return res;
             }
             let cur_hash = get_state(&state, false);
-            for mov in moves.iter() {
+            for (mov_idx, mov) in moves.iter().enumerate() {
                 let mut new_state = state.clone();
                 mov.permutation.apply_rev(&mut new_state);
                 let hash = get_state(&new_state, false);
@@ -143,7 +143,7 @@ pub fn precompute_moves_from_final_state<'a>(
                         hash,
                         Edge {
                             next_state_hash: cur_hash,
-                            mov: Some(mov),
+                            mov_idx,
                             len,
                         },
                     );
@@ -156,29 +156,30 @@ pub fn precompute_moves_from_final_state<'a>(
     res
 }
 
-pub fn precompute_moves<'a>(
+pub fn precompute_moves(
     n: usize,
-    moves: &'a [SeveralMoves],
+    moves: &[SeveralMoves],
     get_state: &mut impl FnMut(&[usize], bool) -> u64,
     limit: usize,
-) -> HashMap<u64, Edge<'a>> {
+) -> HashMap<u64, Edge> {
     precompute_moves_from_final_state(n, moves, get_state, limit, (0..n).collect())
 }
 
 pub fn apply_precomputed_moves(
     state: &mut [usize],
-    prec: &HashMap<u64, Edge<'_>>,
+    prec: &HashMap<u64, Edge>,
     get_state: impl Fn(&[usize], bool) -> u64,
     answer: &mut Vec<String>,
+    possible_moves: &[SeveralMoves],
 ) -> bool {
     let mut cur_hash = get_state(state, false);
     while let Some(edge) = prec.get(&cur_hash) {
-        if let Some(mov) = edge.mov {
-            mov.permutation.apply(state);
-            answer.extend(mov.name.clone());
-        } else {
+        if edge.mov_idx == usize::MAX {
             return true;
         }
+        let mov = &possible_moves[edge.mov_idx];
+        mov.permutation.apply(state);
+        answer.extend(mov.name.clone());
         cur_hash = edge.next_state_hash;
         assert_eq!(cur_hash, get_state(state, false));
     }
@@ -187,7 +188,7 @@ pub fn apply_precomputed_moves(
 
 pub fn apply_precomputed_moves_bfs(
     start_state: &mut [usize],
-    prec: &HashMap<u64, Edge<'_>>,
+    prec: &HashMap<u64, Edge>,
     get_state: impl Fn(&[usize], bool) -> u64,
     answer: &mut Vec<String>,
     moves: &[SeveralMoves],
@@ -200,7 +201,7 @@ pub fn apply_precomputed_moves_bfs(
         start_hash,
         Edge {
             next_state_hash: start_hash,
-            mov: None,
+            mov_idx: usize::MAX,
             len: 0,
         },
     );
@@ -212,7 +213,7 @@ pub fn apply_precomputed_moves_bfs(
                 eprintln!("it: {}", it);
             }
             let cur_hash = get_state(&state, false);
-            for mov in moves.iter() {
+            for (mov_idx, mov) in moves.iter().enumerate() {
                 let mut new_state = state.clone();
                 mov.permutation.apply(&mut new_state);
                 let hash = get_state(&new_state, false);
@@ -224,7 +225,7 @@ pub fn apply_precomputed_moves_bfs(
                     let mut tmp_hash = cur_hash;
                     while tmp_hash != start_hash {
                         let edge = res.get(&tmp_hash).unwrap();
-                        moves_to_apply.push(edge.mov.unwrap());
+                        moves_to_apply.push(&moves[edge.mov_idx]);
                         tmp_hash = edge.next_state_hash;
                     }
                     moves_to_apply.reverse();
@@ -237,7 +238,8 @@ pub fn apply_precomputed_moves_bfs(
                         start_state,
                         prec,
                         &get_state,
-                        answer
+                        answer,
+                        moves
                     ));
                     let st1 = get_state(&(0..start_state.len()).collect::<Vec<_>>(), true);
                     let st2 = get_state(start_state, true);
@@ -256,7 +258,7 @@ pub fn apply_precomputed_moves_bfs(
                         hash,
                         Edge {
                             next_state_hash: cur_hash,
-                            mov: Some(mov),
+                            mov_idx,
                             len,
                         },
                     );
