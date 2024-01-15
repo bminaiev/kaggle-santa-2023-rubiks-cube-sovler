@@ -85,12 +85,12 @@ pub fn solve_edges(sol: &mut TaskSolution) {
 
     let squares = build_squares(sz);
     let edges = calc_cube_edges(&squares);
-    for (lvl, edges) in edges.iter().enumerate() {
-        eprintln!("LVL: {lvl}");
-        for edge in edges.iter() {
-            eprintln!("  {:?}", edge);
-        }
-    }
+    // for (lvl, edges) in edges.iter().enumerate() {
+    //     eprintln!("LVL: {lvl}");
+    //     for edge in edges.iter() {
+    //         eprintln!("  {:?}", edge);
+    //     }
+    // }
     let puzzle_info = &sol.task.info;
 
     let side_moves = get_cube_side_moves(sz);

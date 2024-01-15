@@ -1,5 +1,6 @@
 use std::{
     collections::{BTreeSet, HashSet},
+    mem::needs_drop,
     ops::Sub,
 };
 
@@ -414,37 +415,8 @@ pub fn solve_nnn(data: &Data, task_type: &str, cube3_converter: &Cube3Converter,
                     if mv_side(mv1) == mv_side(side_mv) || mv_side(mv2) == mv_side(side_mv) {
                         continue;
                     }
-                    let check = [
-                        mv1,
-                        side_mv,
-                        mv2,
-                        &rev_move(side_mv),
-                        &rev_move(mv1),
-                        side_mv,
-                        &rev_move(mv2),
-                        &rev_move(side_mv),
-                    ];
-                    let mut perm = Permutation::identity();
-                    for mv in check.iter() {
-                        // eprintln!(
-                        //     "Combiningin: {perm:?}, {:?}",
-                        //     &puzzle_info.moves[&mv.to_string()]
-                        // );
-                        let check_perm = perm.combine_linear(&puzzle_info.moves[&mv.to_string()]);
-                        // perm = perm.combine(&puzzle_info.moves[&mv.to_string()]);
-                        // assert_eq!(check_perm, perm);
-                        perm = check_perm;
-                    }
-                    if perm.cycles.len() == 1 {
-                        // eprintln!("Found: {perm:?}");
-                        // eprintln!("{mv1} {mv2} {side_mv}");
-                        moves.push(Triangle {
-                            mv: SeveralMoves {
-                                name: check.iter().map(|&x| x.to_string()).collect(),
-                                permutation: perm,
-                            },
-                            info: vec![mv1.clone(), mv2.clone(), side_mv.clone()],
-                        });
+                    if let Some(tr) = Triangle::create(puzzle_info, mv1, mv2, side_mv) {
+                        moves.push(tr);
                     }
                 }
             }
@@ -471,8 +443,6 @@ pub fn solve_nnn(data: &Data, task_type: &str, cube3_converter: &Cube3Converter,
         }
     }
 
-    let cube_centers = calc_cube_centers(&squares);
-
     eprintln!("hm={}", hs.len());
     for sol in solutions.iter_mut() {
         // eprintln!("State: {:?}", sol.state);
@@ -483,22 +453,69 @@ pub fn solve_nnn(data: &Data, task_type: &str, cube3_converter: &Cube3Converter,
             sol.answer.push(mv.to_string());
         }
 
+        let mut need_to_do = vec![];
+
+        let mut triangles_total_applied = 0;
+        let mut triangles_groups_joined = 0;
+
         for triangles in triangles_by_dsu.iter() {
             if !triangles.is_empty() {
-                match solve_triangle(&sol.state, triangles) {
-                    None => unreachable!(),
-                    Some(moves) => {
-                        eprintln!("Need {} moves", moves.len());
-                        for &mv in moves.iter() {
-                            let mv = &triangles[mv].mv;
-                            mv.permutation.apply(&mut sol.state);
-                            sol.answer.extend(mv.name.iter().cloned());
-                        }
-                    }
+                let r = solve_triangle(&sol.state, triangles).unwrap();
+                let mut to_do = vec![];
+                for &id in r.iter().rev() {
+                    to_do.push(triangles[id].clone());
                 }
+                need_to_do.push(to_do);
             }
         }
-        eprintln!("OK! {}", sol.task_id);
+
+        // let mut all_triangles_to_apply: Vec<_> = need_to_do.iter().flatten().collect();
+        // for i in 0..all_triangles_to_apply.len() {
+        //     for j in i + 1..all_triangles_to_apply.len() {
+        //         let tr1 = &all_triangles_to_apply[i];
+        //         let tr2 = &all_triangles_to_apply[j];
+        //         if tr1.can_combine(tr2, puzzle_info) {
+        //             eprintln!("WOW {i} {j}");
+        //         }
+        //     }
+        // }
+
+        loop {
+            let mut triangles_to_apply: Vec<Triangle> = vec![];
+            for i in 0..need_to_do.len() {
+                if need_to_do[i].is_empty() {
+                    continue;
+                }
+                if !triangles_to_apply.is_empty()
+                    && !triangles_to_apply[0]
+                        .can_combine(need_to_do[i].last().unwrap(), puzzle_info)
+                {
+                    continue;
+                }
+                triangles_to_apply.push(need_to_do[i].pop().unwrap());
+            }
+            if triangles_to_apply.is_empty() {
+                break;
+            }
+            let zz: Vec<_> = triangles_to_apply.iter().collect();
+            if zz.len() > 1 {
+                eprintln!("Combined {} triangles!", zz.len());
+            }
+            triangles_total_applied += zz.len();
+            triangles_groups_joined += 1;
+            let all_moves = Triangle::gen_combination_moves(&zz);
+            for mv in all_moves.into_iter() {
+                puzzle_info.moves[&mv].apply(&mut sol.state);
+                sol.answer.push(mv.clone());
+            }
+        }
+
+        eprintln!(
+            "Task_id = {}. Used moves for now: {}",
+            sol.task_id,
+            sol.answer.len()
+        );
+        eprintln!("Triangles total: {triangles_total_applied}. Groups: {triangles_groups_joined}");
 
         // let mut all_masks: Vec<_> = (0..128usize).collect();
         // all_masks.sort_by_key(|m| m.count_ones());
