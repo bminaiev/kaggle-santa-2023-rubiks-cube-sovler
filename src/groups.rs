@@ -203,6 +203,7 @@ pub fn apply_precomputed_moves(
             return true;
         }
         let mov = &possible_moves[edge.mov_idx];
+        eprintln!("Apply move {:?}", mov.name);
         mov.permutation.apply(state);
         if let Some(cur_rot) = &mut cur_rot {
             *cur_rot = apply_rotations(*cur_rot, mov);
@@ -220,6 +221,7 @@ pub fn apply_precomputed_moves(
         }
         assert_eq!(cur_hash, real_state_hash);
     }
+    eprintln!("Can't find this state in the precalc :(");
     false
 }
 

@@ -548,7 +548,7 @@ pub fn step_3(
 }
 
 pub fn solve4(data: &Data, task_type: &str) {
-    let mut solutions = TaskSolution::all_by_type(data, task_type);
+    let mut solutions = TaskSolution::all_by_type(data, task_type, false);
     eprintln!("Tasks cnt: {}", solutions.len());
     solutions.truncate(1);
     let task_id = solutions[0].task_id;

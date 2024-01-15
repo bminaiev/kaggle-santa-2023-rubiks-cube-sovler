@@ -15,7 +15,7 @@ impl TaskSolution {
             task_id,
             answer: vec![],
             failed_on_stage: None,
-            state: get_start_permutation(&data.puzzles[task_id], &data.solutions[&task_id]),
+            state: get_start_permutation(&data.puzzles[task_id], &data.solutions.sample[&task_id]),
             task: data.puzzles[task_id].clone(),
         }
     }
@@ -30,10 +30,13 @@ impl TaskSolution {
         }
     }
 
-    pub fn all_by_type(data: &Data, task_type: &str) -> Vec<Self> {
+    pub fn all_by_type(data: &Data, task_type: &str, only_perm: bool) -> Vec<Self> {
         let mut solutions = vec![];
         for task in data.puzzles.iter() {
             if task.puzzle_type == task_type {
+                if only_perm && task.color_names.len() == 6 {
+                    continue;
+                }
                 solutions.push(TaskSolution::new(data, task.id))
             }
         }

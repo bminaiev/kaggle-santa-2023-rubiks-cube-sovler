@@ -37,4 +37,8 @@ impl Puzzle {
         }
         self.convert_state(&state)
     }
+
+    pub fn get_color_type(&self) -> String {
+        self.color_names[self.solution_state[1]].clone()
+    }
 }

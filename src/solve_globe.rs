@@ -234,7 +234,7 @@ fn dfs(
 }
 
 pub fn solve_globe(data: &Data, task_type: &str) {
-    let mut solutions = TaskSolution::all_by_type(data, task_type);
+    let mut solutions = TaskSolution::all_by_type(data, task_type, false);
     eprintln!("Number of tasks: {}", solutions.len());
     solutions.truncate(1);
 

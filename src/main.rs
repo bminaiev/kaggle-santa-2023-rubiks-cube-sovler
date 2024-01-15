@@ -18,6 +18,7 @@ use crate::{
     solver3::{solve3, Solver3},
     solver4::solve4,
     solver_nnn::solve_nnn,
+    submission_combiner::make_submission,
     to_cube3_converter::Cube3Converter,
     utils::{get_all_perms, get_blocks},
 };
@@ -38,6 +39,7 @@ pub mod solve_globe;
 pub mod solver3;
 pub mod solver4;
 pub mod solver_nnn;
+pub mod submission_combiner;
 pub mod to_cube3_converter;
 pub mod triangle_solver;
 pub mod triangles_parity;
@@ -139,7 +141,7 @@ fn show_info(data: &Data) {
     let solutions = &data.solutions;
 
     let mut sorted_test_ids = puzzles.iter().map(|p| p.id).collect::<Vec<_>>();
-    sorted_test_ids.sort_by_key(|id| Reverse(solutions[id].len()));
+    sorted_test_ids.sort_by_key(|id| Reverse(solutions.sample[id].len()));
     sorted_test_ids.reverse();
 
     let mut sum_lens = 0;
@@ -151,7 +153,7 @@ fn show_info(data: &Data) {
 
     for puzzle_id in sorted_test_ids[..].iter() {
         let puzzle = &puzzles[*puzzle_id];
-        let sol = &solutions[&puzzle.id];
+        let sol = &solutions.sample[&puzzle.id];
         println!(
             "{}: {}. Len: {}. Sol len: {}. Colors = {}",
             puzzle.id,
@@ -477,12 +479,15 @@ fn main() {
 
     let data = load_data();
 
+    // make_submission(&data);
+
     // analyze_puzzle_type(&data, "cube_3/3/3");
     // analyze_permuations(&data);
 
     // show_info(&data);
-    let cube3_converter = Cube3Converter::new(Solver3::new(&data));
-    solve_nnn(&data, "cube_9/9/9", &cube3_converter);
+    let exact_perm = true;
+    let cube3_converter = Cube3Converter::new(Solver3::new(&data, exact_perm));
+    solve_nnn(&data, "cube_5/5/5", &cube3_converter, exact_perm);
 
     // solve3(&data, "cube_3/3/3");
 

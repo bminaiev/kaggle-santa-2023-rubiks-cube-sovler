@@ -50,8 +50,14 @@ fn load_puzzles(puzzle_info: &BTreeMap<String, PuzzleType>) -> Vec<Puzzle> {
     puzzles
 }
 
-fn load_solutions() -> HashMap<usize, Vec<String>> {
-    let mut reader = csv::Reader::from_path("data/sample_submission.csv").unwrap();
+pub struct Solutions {
+    pub sample: HashMap<usize, Vec<String>>,
+    // https://www.kaggle.com/code/seanbearden/solve-all-nxnxn-cubes-w-traditional-solution-state/output
+    pub s853k: HashMap<usize, Vec<String>>,
+}
+
+fn load_solutions_file(filename: &str) -> HashMap<usize, Vec<String>> {
+    let mut reader = csv::Reader::from_path(format!("data/{filename}")).unwrap();
 
     let mut solutions: HashMap<usize, Vec<String>> = HashMap::new();
 
@@ -64,6 +70,13 @@ fn load_solutions() -> HashMap<usize, Vec<String>> {
     }
 
     solutions
+}
+
+fn load_solutions() -> Solutions {
+    Solutions {
+        sample: load_solutions_file("sample_submission.csv"),
+        s853k: load_solutions_file("submission_853k.csv"),
+    }
 }
 
 fn load_puzzle_info() -> BTreeMap<String, PuzzleType> {
@@ -103,7 +116,7 @@ fn load_puzzle_info() -> BTreeMap<String, PuzzleType> {
 pub struct Data {
     pub puzzle_info: BTreeMap<String, PuzzleType>,
     pub puzzles: Vec<Puzzle>,
-    pub solutions: HashMap<usize, Vec<String>>,
+    pub solutions: Solutions,
 }
 
 pub fn load_data() -> Data {

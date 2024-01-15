@@ -54,19 +54,21 @@ pub struct Solver3 {
     groups: Vec<Groups>,
     blocks: Vec<Vec<usize>>,
     precalcs: Vec<HashMap<u64, Edge>>,
+    exact_perm: bool,
 }
 
 impl Solver3 {
-    pub fn new_fake(data: &Data) -> Self {
+    pub fn new_fake(data: &Data, exact_perm: bool) -> Self {
         Self {
             move_groups: vec![],
             groups: vec![],
             blocks: vec![],
             precalcs: vec![],
+            exact_perm,
         }
     }
 
-    pub fn new(data: &Data) -> Self {
+    pub fn new(data: &Data, exact_perm: bool) -> Self {
         let puzzle_info = data.puzzle_info.get("cube_3/3/3").unwrap();
         let move_groups = create_move_groups(puzzle_info);
         eprintln!("Total move groups: {}", move_groups.len());
@@ -79,6 +81,7 @@ impl Solver3 {
             groups,
             blocks,
             precalcs: vec![],
+            exact_perm,
         };
 
         // create precals folder if not exists
@@ -87,7 +90,7 @@ impl Solver3 {
         let precalcs: Vec<_> = (0..res.move_groups.len() - 1)
             .into_par_iter()
             .map(|step| {
-                let include_rotations = step == 4;
+                let include_rotations = step == 4 && res.exact_perm;
                 let precalc_file = format!(
                     "precalcs/{step}{}.txt",
                     if include_rotations { "-rot" } else { "" }
@@ -164,6 +167,7 @@ impl Solver3 {
 
     pub fn solve_task(&self, task: &mut TaskSolution) {
         for step in 0..self.precalcs.len() {
+            eprintln!("Doing step {step}...");
             let res = apply_precomputed_moves(
                 &mut task.state,
                 &self.precalcs[step],
@@ -281,9 +285,9 @@ impl Solver3 {
 
 pub fn solve3(data: &Data, task_type: &str) {
     eprintln!("SOLVING {task_type}");
-    let mut solutions = TaskSolution::all_by_type(data, task_type);
+    let mut solutions = TaskSolution::all_by_type(data, task_type, false);
 
-    let solver = Solver3::new(data);
+    let solver = Solver3::new(data, false);
 
     for sol in solutions.iter_mut() {
         solver.solve_task(sol);

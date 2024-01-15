@@ -297,10 +297,10 @@ pub fn solve_subproblem00(
     }
 }
 
-pub fn solve_nnn(data: &Data, task_type: &str, cube3_converter: &Cube3Converter) {
+pub fn solve_nnn(data: &Data, task_type: &str, cube3_converter: &Cube3Converter, exact_perm: bool) {
     println!("Solving nnn: {task_type}");
 
-    let mut solutions = TaskSolution::all_by_type(data, task_type);
+    let mut solutions = TaskSolution::all_by_type(data, task_type, exact_perm);
     // solutions.reverse();
     eprintln!("Tasks cnt: {}", solutions.len());
     solutions.truncate(1);
