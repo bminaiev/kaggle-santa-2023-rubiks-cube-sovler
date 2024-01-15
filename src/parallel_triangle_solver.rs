@@ -1,3 +1,5 @@
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
+
 use crate::{
     sol_utils::TaskSolution,
     triangle_solver::{Triangle, TriangleGroupSolver},
@@ -36,108 +38,125 @@ pub fn solve_all_triangles(groups: &[Vec<Triangle>], sol: &mut TaskSolution) {
 
     loop {
         let mut changed = false;
-        let mut estimate_changes: Vec<_> = triangles_by_key
-            .keys()
-            .map(|key| {
-                let mut change = 0;
-                for (solver, triangles) in solvers.iter().zip(groups.iter()) {
-                    let mut here_triangles = vec![];
-                    for tr in triangles.iter() {
-                        if tr.key() == *key {
-                            here_triangles.push(tr);
-                        }
-                    }
-                    if here_triangles.is_empty() {
-                        continue;
-                    }
-                    let cur_dist_estimate = solver.get_dist_estimate(&sol.state);
-                    let mut best_dist = 0;
-                    for tr in here_triangles.iter() {
-                        let mut new_state = sol.state.clone();
-                        tr.mv.permutation.apply(&mut new_state);
-                        let new_dist_estimate = solver.get_dist_estimate(&new_state);
-                        if new_dist_estimate < cur_dist_estimate {
-                            let change_here = cur_dist_estimate - new_dist_estimate;
-                            if change_here > best_dist {
-                                best_dist = change_here;
-                            }
-                        }
-                    }
-                    change += best_dist;
-                }
-                EstimateChange {
-                    change,
-                    key: key.clone(),
-                }
-            })
-            .collect();
-        estimate_changes.sort();
-        estimate_changes.reverse();
-
-        for change in estimate_changes.iter() {
-            let mut apply_triangles: Vec<&Triangle> = vec![];
-            let mut groups_changed = vec![];
-            for i in 0..solvers.len() {
-                let solver = &solvers[i];
-                let triangles = &groups[i];
-                let mut here_triangles = vec![];
-                for tr in triangles.iter() {
-                    if tr.key() == change.key {
-                        here_triangles.push(tr);
-                    }
-                }
-                if here_triangles.is_empty() {
-                    continue;
-                }
-                let cur_dist_estimate = solver.get_dist_estimate(&sol.state);
-                let mut best_dist = (0, None);
-                for tr in here_triangles.iter() {
-                    let mut new_state = sol.state.clone();
-                    tr.mv.permutation.apply(&mut new_state);
-                    let new_dist_estimate = solver.get_dist_estimate(&new_state);
-                    if new_dist_estimate < cur_dist_estimate {
-                        let real_ans_len = solver.solve(&new_state).len();
-                        if real_ans_len < solver.cur_answer_len {
-                            let dist = solver.cur_answer_len - real_ans_len;
-                            if dist > best_dist.0 {
-                                best_dist = (dist, Some(tr));
-                            }
-                        }
-                    }
-                }
-                if best_dist.0 > 0 {
-                    let tr_to_use = best_dist.1.unwrap();
-                    let can_use = apply_triangles.iter().all(|tr| tr_to_use.can_combine(tr));
-                    if can_use {
-                        apply_triangles.push(tr_to_use);
-                        groups_changed.push(i);
-                    }
-                }
+        for min_triangles_apply in (1..=3).rev() {
+            if changed {
+                // break;
             }
-            if !apply_triangles.is_empty() {
-                changed = true;
-                triangles_total_applied += apply_triangles.len();
-                triangles_groups_joined += 1;
-                // for tt in apply_triangles.iter() {
-                //     // eprintln!("Apply triangle: {}", tt.mv.name);
-                // }
-                let all_moves = Triangle::gen_combination_moves(&apply_triangles);
-                for mv in all_moves.into_iter() {
-                    puzzle_info.moves[&mv].apply(&mut sol.state);
-                    sol.answer.push(mv.clone());
+            eprintln!("Start new iteration... Min tr: {min_triangles_apply}");
+            let mut estimate_changes: Vec<_> = triangles_by_key
+                .keys()
+                .map(|key| {
+                    let mut change = 0;
+                    for (solver, triangles) in solvers.iter().zip(groups.iter()) {
+                        let mut here_triangles = vec![];
+                        for tr in triangles.iter() {
+                            if tr.key() == *key {
+                                here_triangles.push(tr);
+                            }
+                        }
+                        if here_triangles.is_empty() {
+                            continue;
+                        }
+                        let cur_dist_estimate = solver.get_dist_estimate(&sol.state);
+                        let mut best_dist = 0;
+                        for tr in here_triangles.iter() {
+                            let mut new_state = sol.state.clone();
+                            tr.mv.permutation.apply(&mut new_state);
+                            let new_dist_estimate = solver.get_dist_estimate(&new_state);
+                            if new_dist_estimate < cur_dist_estimate {
+                                let change_here = cur_dist_estimate - new_dist_estimate;
+                                if change_here > best_dist {
+                                    best_dist = change_here;
+                                }
+                            }
+                        }
+                        change += best_dist;
+                    }
+                    EstimateChange {
+                        change,
+                        key: key.clone(),
+                    }
+                })
+                .collect();
+            estimate_changes.sort();
+            estimate_changes.reverse();
+
+            for change in estimate_changes.iter() {
+                let mut apply_triangles: Vec<&Triangle> = vec![];
+                let mut groups_changed = vec![];
+                let changes_to_apply: Vec<_> = (0..solvers.len())
+                    .into_par_iter()
+                    .flat_map(|i| {
+                        let solver = &solvers[i];
+                        let triangles = &groups[i];
+                        let mut here_triangles = vec![];
+                        for tr in triangles.iter() {
+                            if tr.key() == change.key {
+                                here_triangles.push(tr);
+                            }
+                        }
+                        if here_triangles.is_empty() {
+                            return None;
+                        }
+                        let cur_dist_estimate = solver.get_dist_estimate(&sol.state);
+                        let mut best_dist = (0, None);
+                        for tr in here_triangles.iter() {
+                            let mut new_state = sol.state.clone();
+                            tr.mv.permutation.apply(&mut new_state);
+                            let new_dist_estimate = solver.get_dist_estimate(&new_state);
+                            if new_dist_estimate < cur_dist_estimate {
+                                let real_ans_len = solver.solve(&new_state).len();
+                                if real_ans_len < solver.cur_answer_len {
+                                    let dist = solver.cur_answer_len - real_ans_len;
+                                    if dist > best_dist.0 {
+                                        best_dist = (dist, Some(tr));
+                                    }
+                                }
+                            }
+                        }
+                        if best_dist.0 > 0 {
+                            let tr_to_use = best_dist.1.unwrap();
+                            let can_use =
+                                apply_triangles.iter().all(|tr| tr_to_use.can_combine(tr));
+                            if can_use {
+                                return Some((i, *tr_to_use));
+                                // apply_triangles.push(tr_to_use);
+                                // groups_changed.push(i);
+                            }
+                        }
+                        None
+                    })
+                    .collect();
+                for (i, tr) in changes_to_apply.into_iter() {
+                    apply_triangles.push(tr);
+                    groups_changed.push(i);
                 }
-                for &gr in groups_changed.iter() {
-                    let new_ans = solvers[gr].solve(&sol.state).len();
-                    assert!(new_ans < solvers[gr].cur_answer_len);
-                    solvers[gr].cur_answer_len = new_ans;
+                if apply_triangles.len() >= min_triangles_apply {
+                    changed = true;
+                    triangles_total_applied += apply_triangles.len();
+                    triangles_groups_joined += 1;
+                    // for tt in apply_triangles.iter() {
+                    //     // eprintln!("Apply triangle: {}", tt.mv.name);
+                    // }
+                    let all_moves = Triangle::gen_combination_moves(&apply_triangles);
+                    for mv in all_moves.into_iter() {
+                        puzzle_info.moves[&mv].apply(&mut sol.state);
+                        sol.answer.push(mv.clone());
+                    }
+                    for &gr in groups_changed.iter() {
+                        let new_ans = solvers[gr].solve(&sol.state).len();
+                        assert!(new_ans < solvers[gr].cur_answer_len);
+                        solvers[gr].cur_answer_len = new_ans;
+                    }
+                    let new_sum_len = solvers.iter().map(|s| s.cur_answer_len).sum::<usize>();
+                    eprintln!(
+                        "New sum len: {}. Ans len: {}. Av group size: {}",
+                        new_sum_len,
+                        sol.answer.len(),
+                        triangles_total_applied as f64 / triangles_groups_joined as f64
+                    );
+                    // break;
                 }
-                let new_sum_len = solvers.iter().map(|s| s.cur_answer_len).sum::<usize>();
-                eprintln!(
-                    "New sum len: {}. Ans len: {}",
-                    new_sum_len,
-                    sol.answer.len()
-                );
-                break;
             }
         }
         if !changed {

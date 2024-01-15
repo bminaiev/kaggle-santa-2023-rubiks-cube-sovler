@@ -488,7 +488,7 @@ fn main() {
     // show_info(&data);
     let exact_perm = false;
     let cube3_converter = Cube3Converter::new(Solver3::new(&data, exact_perm));
-    solve_nnn(&data, "cube_19/19/19", &cube3_converter, exact_perm);
+    solve_nnn(&data, "cube_33/33/33", &cube3_converter, exact_perm);
 
     // solve3(&data, "cube_3/3/3");
 
