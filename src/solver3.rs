@@ -7,7 +7,9 @@ use std::{
 use crate::{
     checker::check_solution,
     data::Data,
-    groups::{apply_precomputed_moves, get_groups, precompute_moves, Edge, Groups, PREC_LIMIT},
+    groups::{
+        apply_precomputed_moves, get_groups, join_hash, precompute_moves, Edge, Groups, PREC_LIMIT,
+    },
     moves::{create_moves, SeveralMoves},
     puzzle_type::PuzzleType,
     rotations::{apply_rotation, apply_rotations, conv_rotations, get_rotations_dists},
@@ -181,6 +183,7 @@ impl Solver3 {
         state: &mut [usize],
         answer: &mut Vec<String>,
         step: usize,
+        is_good: &impl Fn(&[usize], usize) -> bool,
     ) -> bool {
         let edge = self.precalcs[step]
             .get(&self.calc_hash(step, state))
@@ -188,7 +191,7 @@ impl Solver3 {
         if edge.len > more_moves || rotation_dists[rot] > more_moves {
             return false;
         }
-        if edge.len == 0 && rotation_dists[rot] == 0 {
+        if edge.len == 0 && rotation_dists[rot] == 0 && is_good(state, rot) {
             eprintln!(
                 "Solution finished with rot: {rot}. {:?}",
                 conv_rotations(rot)
@@ -209,6 +212,7 @@ impl Solver3 {
                 state,
                 answer,
                 step,
+                is_good,
             ) {
                 return true;
             }
@@ -234,13 +238,30 @@ impl Solver3 {
                 assert!(res);
                 continue;
             }
+            let is_good = |state: &[usize], rot: usize| -> bool {
+                if step != 3 {
+                    true
+                } else {
+                    let hash = self.calc_hash(step + 1, state);
+                    let hash = join_hash(hash, rot);
+                    self.precalcs[step + 1].contains_key(&hash)
+                }
+            };
             let rotation_dists =
                 get_rotations_dists(&self.move_groups[step], &self.move_groups[step + 1]);
             for sol_len in 0.. {
                 eprintln!("Trying len {sol_len}...");
                 let mut answer = vec![];
                 let mut state = task.state.clone();
-                if self.dfs(sol_len, &rotation_dists, rot, &mut state, &mut answer, step) {
+                if self.dfs(
+                    sol_len,
+                    &rotation_dists,
+                    rot,
+                    &mut state,
+                    &mut answer,
+                    step,
+                    &is_good,
+                ) {
                     eprintln!("Found solution for step {step}!");
                     for mv in answer.iter() {
                         task.answer.push(mv.clone());

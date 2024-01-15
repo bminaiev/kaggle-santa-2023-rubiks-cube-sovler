@@ -100,7 +100,7 @@ pub struct Edge {
 
 pub const PREC_LIMIT: usize = 100_000_000;
 
-fn join_hash(a: u64, b: usize) -> u64 {
+pub fn join_hash(a: u64, b: usize) -> u64 {
     let mut hasher = DefaultHasher::new();
     hasher.write_u64(a);
     hasher.write_usize(b);
