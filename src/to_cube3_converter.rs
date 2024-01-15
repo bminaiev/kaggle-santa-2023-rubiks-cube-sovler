@@ -64,7 +64,7 @@ impl Cube3Converter {
             info: data.puzzle_info.get("cube_3/3/3").unwrap().clone(),
         };
         let mut new_task = TaskSolution::new_fake(state, fake_task);
-        self.cube3_solver.solve_task(&mut new_task);
+        self.cube3_solver.solve_task_with_rotations(&mut new_task);
         for mv in new_task.answer.iter() {
             let mv = if mv.ends_with('2') {
                 format!("{}{}", &mv[..mv.len() - 1], sz - 1)

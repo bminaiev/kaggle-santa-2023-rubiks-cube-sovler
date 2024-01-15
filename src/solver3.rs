@@ -10,6 +10,7 @@ use crate::{
     groups::{apply_precomputed_moves, get_groups, precompute_moves, Edge, Groups, PREC_LIMIT},
     moves::{create_moves, SeveralMoves},
     puzzle_type::PuzzleType,
+    rotations::{apply_rotation, apply_rotations, get_rotations_dists},
     sol_utils::TaskSolution,
     utils::{get_all_perms, get_blocks, get_start_permutation},
 };
@@ -164,6 +165,72 @@ impl Solver3 {
             );
             assert!(res);
         }
+    }
+
+    fn dfs(
+        &self,
+        more_moves: usize,
+        rotation_dists: &[usize],
+        rot: usize,
+        state: &mut [usize],
+        answer: &mut Vec<String>,
+        step: usize,
+    ) -> bool {
+        let edge = self.precalcs[step]
+            .get(&self.calc_hash(step, state))
+            .unwrap();
+        if edge.len > more_moves || rotation_dists[rot] > more_moves {
+            return false;
+        }
+        if edge.len == 0 && rotation_dists[rot] == 0 {
+            eprintln!("Solution finished with rot: {rot}");
+            return true;
+        }
+        for mv in self.move_groups[step].iter() {
+            if more_moves < mv.name.len() {
+                continue;
+            }
+            mv.permutation.apply(state);
+            let new_rot = apply_rotations(rot, mv);
+            answer.extend(mv.name.clone());
+            if self.dfs(
+                more_moves - mv.name.len(),
+                rotation_dists,
+                new_rot,
+                state,
+                answer,
+                step,
+            ) {
+                return true;
+            }
+            answer.truncate(answer.len() - mv.name.len());
+            mv.permutation.apply_rev(state);
+        }
+
+        false
+    }
+
+    pub fn solve_task_with_rotations(&self, task: &mut TaskSolution) {
+        let mut rot = 0;
+        for step in 0..self.precalcs.len() {
+            let rotation_dists =
+                get_rotations_dists(&self.move_groups[step], &self.move_groups[step + 1]);
+            for sol_len in 0.. {
+                eprintln!("Trying len {sol_len}...");
+                let mut answer = vec![];
+                let mut state = task.state.clone();
+                if self.dfs(sol_len, &rotation_dists, rot, &mut state, &mut answer, step) {
+                    eprintln!("Found solution for step {step}!");
+                    for mv in answer.iter() {
+                        task.answer.push(mv.clone());
+                        task.task.info.moves[mv].apply(&mut task.state);
+                        rot = apply_rotation(rot, mv);
+                    }
+                    break;
+                }
+            }
+        }
+        assert_eq!(rot, 0);
     }
 }
 

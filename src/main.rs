@@ -32,6 +32,7 @@ pub mod moves;
 pub mod permutation;
 pub mod puzzle;
 pub mod puzzle_type;
+pub mod rotations;
 pub mod sol_utils;
 pub mod solve_globe;
 pub mod solver3;
@@ -481,7 +482,7 @@ fn main() {
 
     // show_info(&data);
     let cube3_converter = Cube3Converter::new(Solver3::new(&data));
-    solve_nnn(&data, "cube_7/7/7", &cube3_converter);
+    solve_nnn(&data, "cube_19/19/19", &cube3_converter);
 
     // solve3(&data, "cube_3/3/3");
 
