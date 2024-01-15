@@ -2,6 +2,7 @@ use std::{
     collections::{hash_map::DefaultHasher, BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
     hash::Hasher,
     io::Read,
+    time::Instant,
 };
 
 use crate::{
@@ -249,7 +250,9 @@ impl Solver3 {
             };
             let rotation_dists =
                 get_rotations_dists(&self.move_groups[step], &self.move_groups[step + 1]);
+            eprintln!("Different moves: {}", self.move_groups[step].len());
             for sol_len in 0.. {
+                let start = Instant::now();
                 eprintln!("Trying len {sol_len}...");
                 let mut answer = vec![];
                 let mut state = task.state.clone();
@@ -270,6 +273,7 @@ impl Solver3 {
                     }
                     break;
                 }
+                eprintln!("Couldn't find anything in {:?}", start.elapsed());
             }
         }
     }

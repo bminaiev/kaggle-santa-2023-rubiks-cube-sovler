@@ -3,6 +3,8 @@ use std::{
     fmt::format,
 };
 
+use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
+
 use crate::{
     cube_edges_calculator::{build_squares, calc_cube_centers, calc_cube_edges, calc_edges_score},
     moves::{rev_move, SeveralMoves},
@@ -13,7 +15,7 @@ use crate::{
 
 fn get_columns(sz: usize, delta: usize) -> [usize; 2] {
     if sz % 2 == 1 {
-        [sz / 2 - delta, sz / 2 + 1 + delta]
+        [sz / 2 - delta - 1, sz / 2 + 1 + delta]
     } else {
         [sz / 2 - delta - 1, sz / 2 + delta]
     }
@@ -94,6 +96,8 @@ pub fn solve_edges(sol: &mut TaskSolution) {
     let side_moves = get_cube_side_moves(sz);
 
     let possible_moves = get_possible_moves(sol);
+
+    let mut rng = StdRng::seed_from_u64(7787788);
 
     for (lvl, possible_moves) in possible_moves.iter().enumerate() {
         eprintln!("Lvl: {lvl}. Cnt moves: {}", possible_moves.len());
@@ -188,7 +192,12 @@ pub fn solve_edges(sol: &mut TaskSolution) {
             if !found {
                 eprintln!("FAILED TO FIND SOLUTION FOR LVL: {lvl}... Let's try to change parity..");
                 let nums = get_columns(sz, lvl);
-                let basic_block = vec!["d0".to_string(), "d0".to_string(), format!("r{}", nums[0])];
+                // TODO: try both?
+                let basic_block = vec![
+                    "d0".to_string(),
+                    "d0".to_string(),
+                    format!("r{}", nums.choose(&mut rng).unwrap()),
+                ];
                 let moves = vec![basic_block; 5]
                     .into_iter()
                     .flatten()

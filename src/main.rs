@@ -482,7 +482,7 @@ fn main() {
 
     // show_info(&data);
     let cube3_converter = Cube3Converter::new(Solver3::new(&data));
-    solve_nnn(&data, "cube_19/19/19", &cube3_converter);
+    solve_nnn(&data, "cube_9/9/9", &cube3_converter);
 
     // solve3(&data, "cube_3/3/3");
 

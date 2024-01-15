@@ -18,11 +18,11 @@ pub fn create_moves(puzzle_info: &PuzzleType, moves_descr: &[&str]) -> Vec<Sever
                     name: vec![s.to_string(), s.to_string()],
                     permutation: puzzle_info.moves[s].x2(),
                 });
-                let s = rev_move(s);
-                res.push(SeveralMoves {
-                    name: vec![s.to_string(), s.to_string()],
-                    permutation: puzzle_info.moves[&s].x2(),
-                });
+                // let s = rev_move(s);
+                // res.push(SeveralMoves {
+                //     name: vec![s.to_string(), s.to_string()],
+                //     permutation: puzzle_info.moves[&s].x2(),
+                // });
             }
             None => {
                 res.push(SeveralMoves {

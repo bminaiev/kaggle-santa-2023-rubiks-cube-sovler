@@ -301,10 +301,11 @@ pub fn solve_nnn(data: &Data, task_type: &str, cube3_converter: &Cube3Converter)
     println!("Solving nnn: {task_type}");
 
     let mut solutions = TaskSolution::all_by_type(data, task_type);
+    // solutions.reverse();
     eprintln!("Tasks cnt: {}", solutions.len());
     solutions.truncate(1);
-    // let task_id = solutions[0].task_id;
-    // eprintln!("Solving id={task_id}");
+    let task_id = solutions[0].task_id;
+    eprintln!("Solving id={task_id}");
 
     let puzzle_info = data.puzzle_info.get(task_type).unwrap();
 
