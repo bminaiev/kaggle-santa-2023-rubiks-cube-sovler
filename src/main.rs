@@ -30,6 +30,7 @@ pub mod dsu;
 pub mod edge_solver;
 pub mod groups;
 pub mod moves;
+pub mod parallel_triangle_solver;
 pub mod permutation;
 pub mod puzzle;
 pub mod puzzle_type;

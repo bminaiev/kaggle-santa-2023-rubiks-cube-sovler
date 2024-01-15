@@ -11,17 +11,17 @@ use rayon::{
 };
 
 use crate::{
-    cube_edges_calculator::{build_squares, calc_cube_centers, calc_cube_edges, calc_edges_score},
+    cube_edges_calculator::build_squares,
     data::Data,
     dsu::Dsu,
     edge_solver::solve_edges,
-    moves::{rev_move, SeveralMoves},
+    moves::SeveralMoves,
+    parallel_triangle_solver::solve_all_triangles,
     permutation::Permutation,
-    puzzle::Puzzle,
     puzzle_type::PuzzleType,
     sol_utils::TaskSolution,
     to_cube3_converter::Cube3Converter,
-    triangle_solver::{solve_triangle, Triangle},
+    triangle_solver::Triangle,
     triangles_parity::triangle_parity_solver,
     utils::{calc_cube_side_size, get_cube_side_moves},
 };
@@ -349,38 +349,9 @@ pub fn solve_nnn(data: &Data, task_type: &str, cube3_converter: &Cube3Converter,
         }
     };
 
-    // 6 -> 32
-    // let moves = ["r2", "-f6", "r0", "f6", "-r2", "-r0"];
-    // let mut perm = Permutation::identity();
-
-    // for mv in moves.iter() {
-    //     perm = perm.combine(&puzzle_info.moves[&mv.to_string()]);
-    // }
-    // eprintln!("Perm: {:?}", perm);
-
-    // for cycle in perm.cycles.iter() {
-    //     eprintln!("Cycle: {cycle:?}");
-    //     show_ids(cycle);
-    // }
-
-    // solve_subproblem(&mut solutions, puzzle_info, &squares, 0, 0);
-    // solve_subproblem(&mut solutions, puzzle_info, &squares, 0, sz / 2);
-
-    for d in 0..2 {
-        // solve_subproblem(&mut solutions, puzzle_info, &squares, 0, d);
-        // for sol in solutions.iter() {
-        //     sol.print(data);
-        // }
-    }
     if sz % 2 == 1 {
         solve_subproblem(&mut solutions, puzzle_info, &squares, 0, 0);
     }
-    // solve_subproblem(&mut solutions, puzzle_info, &squares, 0, 2);
-
-    // for sol in solutions.iter() {
-    //     sol.print(data);
-    //     show_ids(&solutions[0].get_correct_colors_positions());
-    // }
 
     let side_moves = get_cube_side_moves(sz);
     let mut it = 0;
@@ -443,6 +414,11 @@ pub fn solve_nnn(data: &Data, task_type: &str, cube3_converter: &Cube3Converter,
         }
     }
 
+    let triangle_groups: Vec<_> = triangles_by_dsu
+        .into_iter()
+        .filter(|x| !x.is_empty())
+        .collect();
+
     eprintln!("hm={}", hs.len());
     for sol in solutions.iter_mut() {
         // eprintln!("State: {:?}", sol.state);
@@ -453,139 +429,7 @@ pub fn solve_nnn(data: &Data, task_type: &str, cube3_converter: &Cube3Converter,
             sol.answer.push(mv.to_string());
         }
 
-        let mut need_to_do = vec![];
-
-        let mut triangles_total_applied = 0;
-        let mut triangles_groups_joined = 0;
-
-        for triangles in triangles_by_dsu.iter() {
-            if !triangles.is_empty() {
-                let r = solve_triangle(&sol.state, triangles).unwrap();
-                let mut to_do = vec![];
-                for &id in r.iter().rev() {
-                    to_do.push(triangles[id].clone());
-                }
-                need_to_do.push(to_do);
-            }
-        }
-
-        // let mut all_triangles_to_apply: Vec<_> = need_to_do.iter().flatten().collect();
-        // for i in 0..all_triangles_to_apply.len() {
-        //     for j in i + 1..all_triangles_to_apply.len() {
-        //         let tr1 = &all_triangles_to_apply[i];
-        //         let tr2 = &all_triangles_to_apply[j];
-        //         if tr1.can_combine(tr2, puzzle_info) {
-        //             eprintln!("WOW {i} {j}");
-        //         }
-        //     }
-        // }
-
-        loop {
-            let mut triangles_to_apply: Vec<Triangle> = vec![];
-            for i in 0..need_to_do.len() {
-                if need_to_do[i].is_empty() {
-                    continue;
-                }
-                if !triangles_to_apply.is_empty()
-                    && !triangles_to_apply[0]
-                        .can_combine(need_to_do[i].last().unwrap(), puzzle_info)
-                {
-                    continue;
-                }
-                triangles_to_apply.push(need_to_do[i].pop().unwrap());
-            }
-            if triangles_to_apply.is_empty() {
-                break;
-            }
-            let zz: Vec<_> = triangles_to_apply.iter().collect();
-            if zz.len() > 1 {
-                eprintln!("Combined {} triangles!", zz.len());
-            }
-            triangles_total_applied += zz.len();
-            triangles_groups_joined += 1;
-            let all_moves = Triangle::gen_combination_moves(&zz);
-            for mv in all_moves.into_iter() {
-                puzzle_info.moves[&mv].apply(&mut sol.state);
-                sol.answer.push(mv.clone());
-            }
-        }
-
-        eprintln!(
-            "Task_id = {}. Used moves for now: {}",
-            sol.task_id,
-            sol.answer.len()
-        );
-        eprintln!("Triangles total: {triangles_total_applied}. Groups: {triangles_groups_joined}");
-
-        // let mut all_masks: Vec<_> = (0..128usize).collect();
-        // all_masks.sort_by_key(|m| m.count_ones());
-        // for mask in all_masks.into_iter() {
-        //     let mut all_ok = true;
-        //     let mut state = sol.state.clone();
-        //     for (i, c) in ["f1", "r1", "d1", "f0", "r0", "d0"].iter().enumerate() {
-        //         if mask & (1 << i) != 0 {
-        //             puzzle_info.moves[&c.to_string()].apply(&mut state);
-        //         }
-        //     }
-        //     let mut zz = vec![];
-        //     for triangles in triangles_by_dsu.iter() {
-        //         if !triangles.is_empty() {
-        //             zz.push(.is_none());
-        //         }
-        //     }
-
-        //     eprintln!("{mask} -> {zz:?}");
-        //     // if all_ok {
-        //     //     eprintln!("All ok!");
-        //     // } else {
-        //     //     eprintln!("Not all ok!");
-        //     // }
-        // }
-        // for side_mv_iter in 0..1 {
-        //     loop {
-        //         let mut changed = false;
-        //         for delta in (1..=3).rev() {
-        //             for mv in moves.iter() {
-        //                 let mut cur_cnt_ok = 0;
-        //                 for &cell_id in mv.permutation.cycles[0].iter() {
-        //                     // if sol.task.solution_state[sol.state[cell_id]]
-        //                     //     == sol.task.solution_state[cell_id]
-        //                     // {
-        //                     //     cur_cnt_ok += 1;
-        //                     // }
-        //                     if sol.state[cell_id] == cell_id {
-        //                         cur_cnt_ok += 1;
-        //                     }
-        //                 }
-        //                 mv.permutation.apply(&mut sol.state);
-        //                 let mut next_cnt_ok = 0;
-        //                 for &cell_id in mv.permutation.cycles[0].iter() {
-        //                     if sol.state[cell_id] == cell_id {
-        //                         next_cnt_ok += 1;
-        //                     }
-        //                 }
-        //                 // eprintln!("cur_cnt_ok={cur_cnt_ok}, next_cnt_ok={next_cnt_ok}");
-        //                 if next_cnt_ok >= cur_cnt_ok + delta {
-        //                     changed = true;
-        //                     // eprintln!("Changed!");
-        //                     sol.answer.extend(mv.name.iter().cloned());
-        //                     break;
-        //                 } else {
-        //                     mv.permutation.apply_rev(&mut sol.state);
-        //                 }
-        //             }
-        //             if changed {
-        //                 break;
-        //             }
-        //         }
-        //         if !changed {
-        //             break;
-        //         }
-        //     }
-        //     // let side_mv = side_moves.choose(&mut rng).unwrap();
-        //     // sol.answer.push(side_mv.to_string());
-        //     // puzzle_info.moves[side_mv].apply(&mut sol.state);
-        // }
+        solve_all_triangles(&triangle_groups, sol);
 
         eprintln!("Before solving edges...");
 

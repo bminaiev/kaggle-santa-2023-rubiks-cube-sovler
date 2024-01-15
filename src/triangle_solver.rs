@@ -1,4 +1,4 @@
-use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::collections::{BinaryHeap, HashMap};
 
 use crate::{
     moves::{rev_move, SeveralMoves},
@@ -19,27 +19,36 @@ impl Triangle {
         [cycle[0], cycle[1], cycle[2]]
     }
 
-    pub fn can_combine(&self, other: &Self, puzzle_info: &PuzzleType) -> bool {
-        if self.info[0] != other.info[0] || self.info[2] != other.info[2] {
+    pub fn key(&self) -> String {
+        format!("{}_{}", self.info[0], self.info[2])
+    }
+
+    pub fn can_combine(&self, other: &Self) -> bool {
+        if self.info[0] != other.info[0]
+            || self.info[2] != other.info[2]
+            || self.info[1] == other.info[1]
+            || self.info[1] == rev_move(&other.info[1])
+        {
             return false;
         }
 
-        let expected_perm = self.mv.permutation.combine(&other.mv.permutation);
+        // let expected_perm = self.mv.permutation.combine(&other.mv.permutation);
 
-        let mut state: Vec<_> = (0..puzzle_info.n).collect();
-        let moves = Self::gen_combination_moves(&[self, other]);
-        for mv in moves.iter() {
-            puzzle_info.moves[mv].apply(&mut state);
-        }
-        expected_perm.apply_rev(&mut state);
-        for (i, val) in state.iter().enumerate() {
-            if *val != i {
-                eprintln!("Bad triangles!: {:?} and {:?}", self.info, other.info);
-                return false;
-            }
-        }
+        // let mut state: Vec<_> = (0..puzzle_info.n).collect();
+        // let moves = Self::gen_combination_moves(&[self, other]);
+        // for mv in moves.iter() {
+        //     puzzle_info.moves[mv].apply(&mut state);
+        // }
+        // expected_perm.apply_rev(&mut state);
+        // for (i, val) in state.iter().enumerate() {
+        //     if *val != i {
+        //         eprintln!("Bad triangles!: {:?} and {:?}", self.info, other.info);
+        //         assert!(false);
+        //         return false;
+        //     }
+        // }
 
-        eprintln!("Can join triangles!: {:?} and {:?}", self.info, other.info);
+        // eprintln!("Can join triangles!: {:?} and {:?}", self.info, other.info);
 
         true
     }
@@ -91,172 +100,157 @@ impl Triangle {
     }
 }
 
-pub fn solve_triangle(start_permutation: &[usize], triangles: &[Triangle]) -> Option<Vec<usize>> {
-    let mut ids = vec![];
-    for tr in triangles.iter() {
-        for v in tr.cycle() {
-            ids.push(v);
-        }
-    }
-    ids.sort();
-    ids.dedup();
+pub struct TriangleGroupSolver {
+    ids: Vec<usize>,
+    d: Vec<Vec<usize>>,
+    triangles: Vec<Triangle>,
+    pub cur_answer_len: usize,
+}
 
-    let size = ids.len();
-    // eprintln!("size={}, moves={}", ids.len(), triangles.len());
-    let conv_id = |x: usize| -> usize { ids.binary_search(&x).unwrap() };
-    let mut d = vec![vec![usize::MAX / 10; size]; size];
-    for i in 0..d.len() {
-        d[i][i] = 0;
-    }
-    for tr in triangles.iter() {
-        let cycle = tr.cycle();
-        for i in 0..3 {
-            let v = conv_id(cycle[i]);
-            let u = conv_id(cycle[(i + 1) % 3]);
-            d[v][u] = 1;
-        }
-    }
-    let sz = d.len();
-    for i in 0..sz {
-        for j in 0..sz {
-            for k in 0..sz {
-                d[i][j] = d[i][j].min(d[i][k] + d[k][j]);
+impl TriangleGroupSolver {
+    pub fn new(triangles: &[Triangle], state: &[usize]) -> Self {
+        let mut ids = vec![];
+        for tr in triangles.iter() {
+            for v in tr.cycle() {
+                ids.push(v);
             }
         }
-    }
-    // for i in 0..size {
-    //     eprintln!("{:?}", d[i]);
-    // }
-    let score = |perm: &[usize]| -> usize {
-        let mut res = 0;
+        ids.sort();
+        ids.dedup();
+
+        let size = ids.len();
+        let mut d = vec![vec![usize::MAX / 10; size]; size];
+        for i in 0..d.len() {
+            d[i][i] = 0;
+        }
+
+        let mut res = Self {
+            ids,
+            d,
+            triangles: vec![],
+            cur_answer_len: usize::MAX,
+        };
+
+        let triangles: Vec<_> = triangles
+            .iter()
+            .map(|tr| {
+                let cycle = tr.cycle();
+                let mut new_cycle = vec![0; 3];
+                for i in 0..3 {
+                    new_cycle[i] = res.conv_id(cycle[i]);
+                }
+                Triangle {
+                    mv: SeveralMoves {
+                        name: tr.mv.name.clone(),
+                        permutation: Permutation {
+                            cycles: vec![new_cycle],
+                        },
+                    },
+                    info: tr.info.clone(),
+                }
+            })
+            .collect();
+
+        res.triangles = triangles;
+
+        for tr in res.triangles.iter() {
+            let cycle = tr.cycle();
+            for i in 0..3 {
+                let v = cycle[i];
+                let u = cycle[(i + 1) % 3];
+                res.d[v][u] = 1;
+            }
+        }
         for i in 0..size {
+            for j in 0..size {
+                for k in 0..size {
+                    res.d[i][j] = res.d[i][j].min(res.d[i][k] + res.d[k][j]);
+                }
+            }
+        }
+
+        res.cur_answer_len = res.solve(state).len();
+
+        res
+    }
+
+    pub fn conv_id(&self, x: usize) -> usize {
+        self.ids.binary_search(&x).unwrap()
+    }
+
+    pub fn score(&self, perm: &[usize]) -> usize {
+        let mut res = 0;
+        for i in 0..self.ids.len() {
             let value = perm[i];
-            res += d[value][i];
+            res += self.d[value][i];
         }
         res
-    };
-    let mut perm: Vec<_> = ids.iter().map(|&x| conv_id(start_permutation[x])).collect();
-    if perm_parity(&perm) == 1 {
-        return None;
     }
-    let triangles: Vec<_> = triangles
-        .iter()
-        .map(|tr| {
-            let cycle = tr.cycle();
-            let mut new_cycle = vec![0; 3];
-            for i in 0..3 {
-                new_cycle[i] = conv_id(cycle[i]);
+
+    fn conv_perm(&self, state: &[usize]) -> Vec<usize> {
+        self.ids.iter().map(|&x| self.conv_id(state[x])).collect()
+    }
+
+    pub fn solve(&self, state: &[usize]) -> Vec<usize> {
+        let perm = self.conv_perm(state);
+        assert!(perm_parity(&perm) == 0);
+        self.a_star(&perm)
+    }
+
+    fn a_star(&self, start: &[usize]) -> Vec<usize> {
+        let mut queue = BinaryHeap::new();
+        queue.push(State::new(start.to_vec(), 0, self.score(start)));
+        let mut seen = HashMap::new();
+        seen.insert(
+            start.to_vec(),
+            Prev {
+                perm: start.to_vec(),
+                edge_id: usize::MAX,
+            },
+        );
+        while let Some(state) = queue.pop() {
+            if state.score == 0 {
+                // eprintln!("Found solution: {:?}", state.spent_moves);
+                let mut res = vec![];
+                let mut cur = state.perm.clone();
+                while cur != start {
+                    let prev = seen[&cur].clone();
+                    res.push(prev.edge_id);
+                    cur = prev.perm;
+                }
+                res.reverse();
+                return res;
             }
-            Triangle {
-                mv: SeveralMoves {
-                    name: tr.mv.name.clone(),
-                    permutation: Permutation {
-                        cycles: vec![new_cycle],
+            for (tr_id, tr) in self.triangles.iter().enumerate() {
+                let mut new_perm = state.perm.clone();
+                tr.mv.permutation.apply(&mut new_perm);
+                let new_score = self.score(&new_perm);
+                if seen.contains_key(&new_perm) {
+                    continue;
+                }
+                seen.insert(
+                    new_perm.clone(),
+                    Prev {
+                        perm: state.perm.clone(),
+                        edge_id: tr_id,
                     },
-                },
-                info: tr.info.clone(),
+                );
+                queue.push(State::new(new_perm, state.spent_moves + 1, new_score));
             }
-        })
-        .collect();
+        }
+        unreachable!();
+    }
 
-    // let mut all_cycles: Vec<_> = triangles.iter().map(|tr| tr.cycle()).collect();
-    // all_cycles.sort();
-    // for cycle in all_cycles.iter() {
-    //     eprintln!("{:?}", cycle);
-    // }
-
-    // eprintln!("Perm: {:?}", perm);
-    // let mut cur_score = score(&perm);
-    // eprintln!("start score={}", cur_score);
-
-    let mut path = a_star(&perm, &triangles, score);
-
-    // loop {
-    //     let mut changed = false;
-    //     for need_delta in (1..=3).rev() {
-    //         for tr in triangles.iter() {
-    //             tr.mv.permutation.apply(&mut perm);
-    //             let new_score = score(&perm);
-    //             if new_score + need_delta <= cur_score {
-    //                 cur_score = new_score;
-    //                 changed = true;
-    //                 eprintln!("new score={}. Need delta: {need_delta}", cur_score);
-    //             } else {
-    //                 tr.mv.permutation.apply_rev(&mut perm);
-    //             }
-    //         }
-    //         if changed {
-    //             break;
-    //         }
-    //     }
-    //     if !changed {
-    //         break;
-    //     }
-    // }
-    Some(path)
+    pub(crate) fn get_dist_estimate(&self, state: &[usize]) -> usize {
+        let perm = self.conv_perm(state);
+        self.score(&perm)
+    }
 }
 
 #[derive(Clone)]
 struct Prev {
     perm: Vec<usize>,
     edge_id: usize,
-}
-
-fn a_star(
-    start: &[usize],
-    triangles: &[Triangle],
-    score: impl Fn(&[usize]) -> usize,
-) -> Vec<usize> {
-    let mut queue = BinaryHeap::new();
-    queue.push(State::new(start.to_vec(), 0, score(start)));
-    let mut seen = HashMap::new();
-    seen.insert(
-        start.to_vec(),
-        Prev {
-            perm: start.to_vec(),
-            edge_id: usize::MAX,
-        },
-    );
-    while let Some(state) = queue.pop() {
-        // if it % 1000 == 0 || state.score < 3 {
-        //     eprintln!(
-        //         "It = {}, score = {}. Len = {}. Perm: {:?}",
-        //         it,
-        //         state.score,
-        //         queue.len(),
-        //         state.perm
-        //     );
-        // }
-        if state.score == 0 {
-            eprintln!("Found solution: {:?}", state.spent_moves);
-            let mut res = vec![];
-            let mut cur = state.perm.clone();
-            while cur != start {
-                let prev = seen[&cur].clone();
-                res.push(prev.edge_id);
-                cur = prev.perm;
-            }
-            res.reverse();
-            return res;
-        }
-        for (tr_id, tr) in triangles.iter().enumerate() {
-            let mut new_perm = state.perm.clone();
-            tr.mv.permutation.apply(&mut new_perm);
-            let new_score = score(&new_perm);
-            if seen.contains_key(&new_perm) {
-                continue;
-            }
-            seen.insert(
-                new_perm.clone(),
-                Prev {
-                    perm: state.perm.clone(),
-                    edge_id: tr_id,
-                },
-            );
-            queue.push(State::new(new_perm, state.spent_moves + 1, new_score));
-        }
-    }
-    unreachable!();
 }
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
