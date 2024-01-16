@@ -54,6 +54,7 @@ pub struct Solutions {
     pub sample: BTreeMap<usize, Vec<String>>,
     // https://www.kaggle.com/code/seanbearden/solve-all-nxnxn-cubes-w-traditional-solution-state/output
     pub s853k: BTreeMap<usize, Vec<String>>,
+    pub my_573k: BTreeMap<usize, Vec<String>>,
 }
 
 fn load_solutions_file(filename: &str) -> BTreeMap<usize, Vec<String>> {
@@ -76,6 +77,7 @@ fn load_solutions() -> Solutions {
     Solutions {
         sample: load_solutions_file("sample_submission.csv"),
         s853k: load_solutions_file("submission_853k.csv"),
+        my_573k: load_solutions_file("my_sub_573k.csv"),
     }
 }
 

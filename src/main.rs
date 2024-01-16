@@ -10,6 +10,7 @@ use rand::{seq::SliceRandom, Rng};
 
 use crate::{
     data::{load_data, Data},
+    globe_jaapsch::solve_globe_jaapsch,
     moves::SeveralMoves,
     permutation::Permutation,
     puzzle::Puzzle,
@@ -29,6 +30,7 @@ pub mod cube_edges_calculator;
 pub mod data;
 pub mod dsu;
 pub mod edge_solver;
+pub mod globe_jaapsch;
 pub mod groups;
 pub mod moves;
 pub mod parallel_triangle_solver;
@@ -506,5 +508,5 @@ fn main() {
     // solve3(&data, "cube_3/3/3");
 
     // show_globe(&data);
-    // solve_globe(&data, "globe_3/4");
+    // solve_globe_jaapsch(&data, "globe_", &mut log);
 }

@@ -47,7 +47,7 @@ impl TaskSolution {
     pub fn all_by_type(data: &Data, task_type: &str, only_perm: bool) -> Vec<Self> {
         let mut solutions = vec![];
         for task in data.puzzles.iter() {
-            if task.puzzle_type == task_type {
+            if task.puzzle_type.starts_with(task_type) {
                 if only_perm && task.color_names.len() == 6 {
                     continue;
                 }

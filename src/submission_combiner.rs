@@ -64,7 +64,7 @@ pub fn make_submission(data: &Data, log: &SolutionsLog) {
         let s200k_est = score_200k_estimator(&task.puzzle_type, data).unwrap_or_default();
         let color_type = task.get_color_type();
         let task_name = format!("{}_{}", get_task_type(&task.puzzle_type), color_type);
-        *hm.entry(task_name).or_default() += s853k_sol_len;
+        *hm.entry(task_name).or_default() += data.solutions.my_573k[&task.id].len();
         eprintln!(
             "Task {}. Type: {}. Colors: {color_type}. Sample len: {sample_sol_len}. 853k: {s853k_sol_len}. 200k: {s200k_est}",
             task.id,
