@@ -41,4 +41,8 @@ impl Puzzle {
     pub fn get_color_type(&self) -> String {
         self.color_names[self.solution_state[1]].clone()
     }
+
+    pub fn need_exact_perm(&self) -> bool {
+        self.get_color_type() != "A"
+    }
 }

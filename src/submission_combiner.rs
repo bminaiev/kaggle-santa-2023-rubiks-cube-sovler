@@ -1,6 +1,6 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fs::File};
 
-use crate::data::Data;
+use crate::{data::Data, sol_utils::TaskSolution, solutions_log::SolutionsLog};
 
 // https://www.kaggle.com/competitions/santa-2023/discussion/466500
 fn score_200k_estimator(puzzle_type: &str, data: &Data) -> Option<usize> {
@@ -40,7 +40,22 @@ fn get_task_type(s: &str) -> &str {
     unreachable!();
 }
 
-pub fn make_submission(data: &Data) {
+fn save_submission(tasks: &[TaskSolution]) {
+    let cost = tasks.iter().map(|t| t.answer.len()).sum::<usize>();
+    eprintln!("Total cost: {}", cost);
+    for task in tasks.iter() {
+        assert!(task.is_solved_with_wildcards());
+    }
+
+    use std::io::Write;
+    let mut f = File::create(format!("data/my_sub_{}k.csv", cost / 1000)).unwrap();
+    writeln!(f, "id,moves").unwrap();
+    for task in tasks.iter() {
+        writeln!(f, "{},{}", task.task_id, task.answer.join(".")).unwrap();
+    }
+}
+
+pub fn make_submission(data: &Data, log: &SolutionsLog) {
     let mut hm = HashMap::<String, usize>::new();
 
     for task in data.puzzles.iter() {
@@ -59,4 +74,46 @@ pub fn make_submission(data: &Data) {
     for (k, v) in hm.iter() {
         println!("{} -> {}", k, v);
     }
+
+    let mut tasks: Vec<_> = data
+        .solutions
+        .s853k
+        .iter()
+        .map(|(&task_id, sol)| {
+            let mut task = TaskSolution::new(data, task_id);
+            for mv in sol.iter() {
+                task.append_move(mv);
+            }
+            task
+        })
+        .collect();
+    for i in 0..tasks.len() {
+        assert_eq!(tasks[i].task_id, i);
+    }
+    let calc_scores =
+        |tasks: &[TaskSolution]| -> usize { tasks.iter().map(|t| t.answer.len()).sum::<usize>() };
+    eprintln!("Sum scores: {}", calc_scores(&tasks));
+    let mut events_perm: Vec<_> = (0..log.events.len()).collect();
+    events_perm.sort_by_key(|&i| (log.events[i].task_id, log.events[i].solution.len()));
+    for idx in events_perm.into_iter() {
+        let event = &log.events[idx];
+        let task = event.to_task(data);
+        if !task.is_solved() {
+            continue;
+        }
+        let task_id = task.task_id;
+        if task.answer.len() < tasks[task.task_id].answer.len() {
+            eprintln!(
+                "Wow! Better solution for task {} ({}, {}). {} -> {}",
+                task.task_id,
+                task.task.puzzle_type,
+                task.task.get_color_type(),
+                tasks[task.task_id].answer.len(),
+                task.answer.len()
+            );
+            tasks[task_id] = task;
+        }
+    }
+    eprintln!("New sum scores: {}", calc_scores(&tasks));
+    save_submission(&tasks);
 }

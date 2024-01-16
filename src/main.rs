@@ -14,10 +14,11 @@ use crate::{
     permutation::Permutation,
     puzzle::Puzzle,
     puzzle_type::PuzzleType,
+    solutions_log::SolutionsLog,
     solve_globe::solve_globe,
     solver3::{solve3, Solver3},
     solver4::solve4,
-    solver_nnn::solve_nnn,
+    solver_nnn::{fix_permutations_in_log, solve_nnn},
     submission_combiner::make_submission,
     to_cube3_converter::Cube3Converter,
     utils::{get_all_perms, get_blocks},
@@ -36,6 +37,7 @@ pub mod puzzle;
 pub mod puzzle_type;
 pub mod rotations;
 pub mod sol_utils;
+pub mod solutions_log;
 pub mod solve_globe;
 pub mod solver3;
 pub mod solver4;
@@ -480,15 +482,26 @@ fn main() {
 
     let data = load_data();
 
-    // make_submission(&data);
+    let mut log = SolutionsLog::new();
+    make_submission(&data, &log);
 
     // analyze_puzzle_type(&data, "cube_3/3/3");
     // analyze_permuations(&data);
 
     // show_info(&data);
-    let exact_perm = false;
-    let cube3_converter = Cube3Converter::new(Solver3::new(&data, exact_perm));
-    solve_nnn(&data, "cube_33/33/33", &cube3_converter, exact_perm);
+
+    // let exact_perm = true;
+    // let cube3_converter = Cube3Converter::new(Solver3::new(&data, exact_perm));
+
+    // fix_permutations_in_log(&data, "cube_5/5/5", &mut log, &cube3_converter);
+
+    // solve_nnn(
+    //     &data,
+    //     "cube_33/33/33",
+    //     &cube3_converter,
+    //     exact_perm,
+    //     &mut log,
+    // );
 
     // solve3(&data, "cube_3/3/3");
 

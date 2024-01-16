@@ -1,6 +1,9 @@
 use rand::Rng;
 
-use crate::{moves::SeveralMoves, permutation::Permutation, puzzle::Puzzle};
+use crate::{
+    cube_edges_calculator::build_squares, moves::SeveralMoves, permutation::Permutation,
+    puzzle::Puzzle,
+};
 
 pub fn get_blocks(n: usize, moves: &[Permutation]) -> Vec<Vec<usize>> {
     let mut rng = rand::thread_rng();
@@ -119,4 +122,38 @@ pub fn get_cube_side_moves(sz: usize) -> Vec<String> {
         }
     }
     res
+}
+
+pub fn show_cube_ids(ids: &[usize], sz: usize) {
+    let squares = build_squares(sz);
+    for line in [vec![0], vec![4, 1, 2, 3], vec![5]].iter() {
+        let add_offset = || {
+            if line.len() == 1 {
+                for _ in 0..sz + 2 {
+                    eprint!(" ");
+                }
+            }
+        };
+        let print_border = || {
+            add_offset();
+            for _ in 0..(sz + 2) * line.len() {
+                eprint!("-");
+            }
+            eprintln!();
+        };
+        print_border();
+        for r in 0..sz {
+            add_offset();
+            for &sq_id in line.iter() {
+                eprint!("|");
+                for c in 0..sz {
+                    let x = ids.contains(&squares[sq_id][r][c]);
+                    eprint!("{}", if x { "X" } else { "." });
+                }
+                eprint!("|");
+            }
+            eprintln!();
+        }
+        print_border();
+    }
 }

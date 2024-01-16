@@ -12,7 +12,7 @@ impl Cube3Converter {
         Self { cube3_solver }
     }
 
-    pub fn solve(&self, data: &Data, task: &mut TaskSolution) {
+    pub fn solve(&self, data: &Data, task: &mut TaskSolution, exact_perm: bool) {
         let n = task.task.info.n;
         let sz = calc_cube_side_size(n);
         let squares = build_squares(sz);
@@ -64,7 +64,19 @@ impl Cube3Converter {
             info: data.puzzle_info.get("cube_3/3/3").unwrap().clone(),
         };
         let mut new_task = TaskSolution::new_fake(state, fake_task);
-        self.cube3_solver.solve_task(&mut new_task);
+        if exact_perm {
+            for _it in 0..10 {
+                eprintln!("TRY SOLVING... {_it}");
+                let mut task_copy = new_task.clone();
+                if self.cube3_solver.solve_task_with_rotations(&mut task_copy) {
+                    eprintln!("WOW! Solved cube3 with permutations...");
+                    new_task = task_copy;
+                    break;
+                }
+            }
+        } else {
+            self.cube3_solver.solve_task(&mut new_task);
+        }
         for mv in new_task.answer.iter() {
             let mv = if mv.ends_with('2') {
                 format!("{}{}", &mv[..mv.len() - 1], sz - 1)

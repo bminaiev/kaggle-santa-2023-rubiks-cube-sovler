@@ -7,6 +7,7 @@ use std::{
 
 use crate::{
     checker::check_solution,
+    cube_edges_calculator::{build_squares, calc_cube_edges},
     data::Data,
     groups::{
         apply_precomputed_moves, get_groups, join_hash, precompute_moves, Edge, Groups, PREC_LIMIT,
@@ -15,9 +16,11 @@ use crate::{
     puzzle_type::PuzzleType,
     rotations::{apply_rotation, apply_rotations, conv_rotations, get_rotations_dists},
     sol_utils::TaskSolution,
-    utils::{get_all_perms, get_blocks, get_start_permutation},
+    utils::{
+        calc_cube_side_size, get_all_perms, get_blocks, get_cube_side_moves, get_start_permutation,
+    },
 };
-use rand::{seq::SliceRandom, SeedableRng};
+use rand::{rngs::StdRng, seq::SliceRandom, thread_rng, Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::io::Write;
@@ -228,8 +231,26 @@ impl Solver3 {
         false
     }
 
-    pub fn solve_task_with_rotations(&self, task: &mut TaskSolution) {
+    fn add_random_side_moves(&self, sol: &mut TaskSolution) -> usize {
+        let n = sol.task.info.n;
+        let sz = calc_cube_side_size(n);
+
+        let side_moves = get_cube_side_moves(sz);
+        let mut rng = thread_rng();
+
         let mut rot = 0;
+        for _ in 0..rng.gen_range(1..5) {
+            let mv = side_moves.choose(&mut rng).unwrap().clone();
+            rot = apply_rotation(rot, &mv, false);
+            eprintln!("ADD RANDOM MOVE... {mv:?}!!!!!!!!!!!!!!!");
+            sol.append_move(&mv);
+        }
+        rot
+    }
+
+    pub fn solve_task_with_rotations(&self, task: &mut TaskSolution) -> bool {
+        let mut rot = self.add_random_side_moves(task);
+
         for step in 0..self.precalcs.len() {
             if step == 4 {
                 let res = apply_precomputed_moves(
@@ -278,8 +299,12 @@ impl Solver3 {
                     break;
                 }
                 eprintln!("Couldn't find anything in {:?}", start.elapsed());
+                if start.elapsed().as_secs_f64() > 1.0 {
+                    return false;
+                }
             }
         }
+        true
     }
 }
 

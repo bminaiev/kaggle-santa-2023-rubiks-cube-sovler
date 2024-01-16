@@ -20,6 +20,15 @@ impl TaskSolution {
         }
     }
 
+    pub fn reset(&mut self, data: &Data) {
+        self.answer.clear();
+        self.failed_on_stage = None;
+        self.state = get_start_permutation(
+            &data.puzzles[self.task_id],
+            &data.solutions.sample[&self.task_id],
+        );
+    }
+
     pub fn new_fake(state: Vec<usize>, task: Puzzle) -> Self {
         TaskSolution {
             task_id: 0,
@@ -28,6 +37,11 @@ impl TaskSolution {
             state,
             task,
         }
+    }
+
+    pub fn append_move(&mut self, mv: &str) {
+        self.answer.push(mv.to_owned());
+        self.task.info.moves[mv].apply(&mut self.state);
     }
 
     pub fn all_by_type(data: &Data, task_type: &str, only_perm: bool) -> Vec<Self> {
@@ -65,5 +79,13 @@ impl TaskSolution {
         (0..self.state.len())
             .filter(|&i| self.state[i] == i)
             .collect()
+    }
+
+    pub(crate) fn is_solved(&self) -> bool {
+        self.get_correct_colors_positions().len() == self.state.len()
+    }
+
+    pub(crate) fn is_solved_with_wildcards(&self) -> bool {
+        self.get_correct_colors_positions().len() + self.task.num_wildcards >= self.state.len()
     }
 }

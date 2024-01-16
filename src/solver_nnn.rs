@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeSet, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     mem::needs_drop,
     ops::Sub,
 };
@@ -11,7 +11,7 @@ use rayon::{
 };
 
 use crate::{
-    cube_edges_calculator::build_squares,
+    cube_edges_calculator::{build_squares, calc_cube_centers, calc_cube_edges, calc_edges_score},
     data::Data,
     dsu::Dsu,
     edge_solver::solve_edges,
@@ -20,10 +20,11 @@ use crate::{
     permutation::Permutation,
     puzzle_type::PuzzleType,
     sol_utils::TaskSolution,
+    solutions_log::SolutionsLog,
     to_cube3_converter::Cube3Converter,
     triangle_solver::Triangle,
     triangles_parity::triangle_parity_solver,
-    utils::{calc_cube_side_size, get_cube_side_moves},
+    utils::{calc_cube_side_size, get_cube_side_moves, show_cube_ids},
 };
 
 struct Subspace {
@@ -298,13 +299,128 @@ pub fn solve_subproblem00(
     }
 }
 
-pub fn solve_nnn(data: &Data, task_type: &str, cube3_converter: &Cube3Converter, exact_perm: bool) {
+#[derive(Debug)]
+enum SolutionStage {
+    Empty,
+    CentersDone,
+    EdgesDone,
+}
+
+fn strip_bad_suffix(sol: &mut TaskSolution, data: &Data) -> SolutionStage {
+    let old_moves = sol.answer.clone();
+    sol.reset(data);
+
+    let n = sol.task.info.n;
+    let sz = calc_cube_side_size(n);
+    let squares = build_squares(sz);
+    let edges = calc_cube_edges(&squares);
+    let cube_centers = calc_cube_centers(&squares);
+
+    let mut first_centers_correct = usize::MAX;
+
+    for mv in old_moves.iter() {
+        sol.append_move(mv);
+        let centers_correct = (0..n).all(|i| !cube_centers[i] || sol.state[i] == i);
+        if !centers_correct {
+            continue;
+        }
+        if first_centers_correct == usize::MAX {
+            first_centers_correct = sol.answer.len();
+        }
+        let edges_score = calc_edges_score(&edges, &sol.state);
+        let edges_correct = (0..edges_score.len()).all(|i| edges_score[i] == edges[i].len() / 2);
+        if edges_correct {
+            return SolutionStage::EdgesDone;
+        }
+    }
+    sol.reset(data);
+    if first_centers_correct == usize::MAX {
+        return SolutionStage::Empty;
+    }
+    for mv in old_moves.into_iter().take(first_centers_correct) {
+        sol.append_move(&mv);
+    }
+    SolutionStage::CentersDone
+}
+
+pub fn fix_permutations_in_log(
+    data: &Data,
+    task_type: &str,
+    log: &mut SolutionsLog,
+    cube3_converter: &Cube3Converter,
+) {
+    let mut last_event = HashMap::new();
+    for (i, event) in log.events.iter().enumerate() {
+        last_event.insert(event.task_id, i);
+    }
+    for i in 0..log.events.len() {
+        let event = &log.events[i];
+        if last_event[&event.task_id] != i {
+            continue;
+        }
+        let mut task = TaskSolution::new(data, event.task_id);
+        if task.task.puzzle_type != task_type {
+            continue;
+        }
+        eprintln!(
+            "Checking solution for task {}. Len: {}. Type: {}",
+            event.task_id,
+            event.solution.len(),
+            task.task.get_color_type()
+        );
+        for mv in event.solution.iter() {
+            task.append_move(mv);
+        }
+
+        let n = task.task.info.n;
+        let sz = calc_cube_side_size(n);
+        let correct_positions = task.get_correct_colors_positions();
+        if correct_positions.len() == n {
+            eprintln!("WOW! Correct solution!");
+            continue;
+        }
+        eprintln!("Task type: {}", task.task.get_color_type());
+        show_cube_ids(&correct_positions, sz);
+        let stage = strip_bad_suffix(&mut task, data);
+        eprintln!("Stage: {:?}", stage);
+        show_cube_ids(&task.get_correct_colors_positions(), sz);
+        match stage {
+            SolutionStage::Empty => unreachable!(),
+            SolutionStage::CentersDone => {
+                solve_edges(&mut task);
+                show_cube_ids(&task.get_correct_colors_positions(), sz);
+                eprintln!("EDGES SOLVED.. SAVE PROGRESS!");
+                log.append(&task);
+            }
+            SolutionStage::EdgesDone => {}
+        }
+        let exact_perm = task.task.need_exact_perm();
+        cube3_converter.solve(data, &mut task, exact_perm);
+        task.print(data);
+        show_cube_ids(&task.get_correct_colors_positions(), sz);
+        if task.is_solved() {
+            eprintln!("WOW! Solved!");
+            log.append(&task);
+        } else {
+            eprintln!("HMMM??? NOT SOLVED? WHY???");
+        }
+        // break;
+    }
+}
+
+pub fn solve_nnn(
+    data: &Data,
+    task_type: &str,
+    cube3_converter: &Cube3Converter,
+    exact_perm: bool,
+    log: &mut SolutionsLog,
+) {
     println!("Solving nnn: {task_type}");
 
     let mut solutions = TaskSolution::all_by_type(data, task_type, exact_perm);
     // solutions.reverse();
     eprintln!("Tasks cnt: {}", solutions.len());
-    solutions.truncate(1);
+    // solutions.truncate(1);
     let task_id = solutions[0].task_id;
     eprintln!("Solving id={task_id}");
 
@@ -315,39 +431,6 @@ pub fn solve_nnn(data: &Data, task_type: &str, cube3_converter: &Cube3Converter,
     let sz = calc_cube_side_size(n);
 
     let squares = build_squares(sz);
-
-    let show_ids = |a: &[usize]| {
-        for line in [vec![0], vec![4, 1, 2, 3], vec![5]].iter() {
-            let add_offset = || {
-                if line.len() == 1 {
-                    for _ in 0..sz + 2 {
-                        eprint!(" ");
-                    }
-                }
-            };
-            let print_border = || {
-                add_offset();
-                for _ in 0..(sz + 2) * line.len() {
-                    eprint!("-");
-                }
-                eprintln!();
-            };
-            print_border();
-            for r in 0..sz {
-                add_offset();
-                for &sq_id in line.iter() {
-                    eprint!("|");
-                    for c in 0..sz {
-                        let x = a.contains(&squares[sq_id][r][c]);
-                        eprint!("{}", if x { "X" } else { "." });
-                    }
-                    eprint!("|");
-                }
-                eprintln!();
-            }
-            print_border();
-        }
-    };
 
     if sz % 2 == 1 {
         solve_subproblem(&mut solutions, puzzle_info, &squares, 0, 0);
@@ -420,6 +503,11 @@ pub fn solve_nnn(data: &Data, task_type: &str, cube3_converter: &Cube3Converter,
         .collect();
 
     eprintln!("hm={}", hs.len());
+
+    let show_ids = |a: &[usize]| {
+        show_cube_ids(a, sz);
+    };
+
     for sol in solutions.iter_mut() {
         // eprintln!("State: {:?}", sol.state);
         let need_moves = triangle_parity_solver(&sol.state, dsu.get_groups(), sol, sz);
@@ -444,9 +532,11 @@ pub fn solve_nnn(data: &Data, task_type: &str, cube3_converter: &Cube3Converter,
         eprintln!("IDS:");
         show_ids(&sol.get_correct_positions());
 
-        cube3_converter.solve(data, sol);
+        cube3_converter.solve(data, sol, false);
         sol.print(data);
         show_ids(&sol.get_correct_colors_positions());
         show_ids(&sol.get_correct_positions());
+
+        log.append(sol);
     }
 }
