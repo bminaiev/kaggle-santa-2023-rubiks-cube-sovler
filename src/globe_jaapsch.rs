@@ -1,6 +1,7 @@
 use std::cmp::{max, min};
 
 use rand::{rngs::StdRng, seq::IteratorRandom, Rng, SeedableRng};
+use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 use crate::{
     data::Data, puzzle_type::PuzzleType, sol_utils::TaskSolution, solutions_log::SolutionsLog,
@@ -142,6 +143,15 @@ struct Swap {
     pos2: usize,
 }
 
+fn apply_swap(state: &State, sol: &mut TaskSolution, swap: &Swap) {
+    let (r1, c1) = state.index_to_rc(swap.pos1);
+    let (r2, c2) = state.index_to_rc(swap.pos2);
+    state.move_row_to_pos(sol, r2, c2, c1 + 1);
+    state.move_rotate(sol, c1 + 1);
+    state.move_row_right(sol, r1, 1);
+    state.move_rotate(sol, c1 + 1);
+}
+
 fn move_to_correct_rows(state: &State, sol: &mut TaskSolution) {
     loop {
         let mut swaps = vec![];
@@ -162,25 +172,30 @@ fn move_to_correct_rows(state: &State, sol: &mut TaskSolution) {
                     }
                     assert_eq!(expect_row2, r1);
                     let d = state.col_dist(c1 + 1, c2);
-                    swaps.push(Swap {
+                    let swap = Swap {
                         cost: d,
                         pos1: state.rc_to_index(r1, c1),
                         pos2: state.rc_to_index(r2, c2),
-                    });
+                    };
+                    swaps.push(swap);
                 }
             }
         }
+
+        let cur_estime = get_perms_moves_estimate(&sol.state, state, true);
+        swaps.par_iter_mut().for_each(|swap| {
+            let mut nsol = sol.clone();
+            apply_swap(state, &mut nsol, swap);
+            let new_estimate = get_perms_moves_estimate(&nsol.state, state, true);
+            assert!(new_estimate >= cur_estime);
+            swap.cost += new_estimate - cur_estime;
+        });
         swaps.sort();
         if swaps.is_empty() {
             break;
         }
         let swap = swaps[0];
-        let (r1, c1) = state.index_to_rc(swap.pos1);
-        let (r2, c2) = state.index_to_rc(swap.pos2);
-        state.move_row_to_pos(sol, r2, c2, c1 + 1);
-        state.move_rotate(sol, c1 + 1);
-        state.move_row_right(sol, r1, 1);
-        state.move_rotate(sol, c1 + 1);
+        apply_swap(state, sol, &swap);
     }
     state.ensure_correct_rows(sol);
 }
@@ -205,7 +220,7 @@ impl Split {
     };
 }
 
-fn get_best_splits(state: &State, a: &[usize]) -> Vec<Split> {
+fn get_best_splits(state: &State, a: &[usize], allow_bad_parity: bool) -> Vec<Split> {
     let mut by_row = vec![[Split::INF; 2]; state.n_rows];
     for row in 0..state.n_rows {
         for split in 0..state.n_cols {
@@ -215,7 +230,10 @@ fn get_best_splits(state: &State, a: &[usize]) -> Vec<Split> {
             let mut invs = 0;
             let mut seen = vec![false; state.n_cols];
             for &idx in perm.iter() {
-                let (_r, c) = state.index_to_rc(idx);
+                let (r, c) = state.index_to_rc(idx);
+                if r != row {
+                    continue;
+                }
                 for c2 in c + 1..state.n_cols {
                     if seen[c2] {
                         invs += 1;
@@ -223,7 +241,6 @@ fn get_best_splits(state: &State, a: &[usize]) -> Vec<Split> {
                 }
                 seen[c] = true;
             }
-
             let split = Split { invs, pos: split };
             if by_row[row][invs % 2] > split {
                 by_row[row][invs % 2] = split;
@@ -242,6 +259,17 @@ fn get_best_splits(state: &State, a: &[usize]) -> Vec<Split> {
             res[r1] = by_row[r1][1];
             res[r2] = by_row[r2][1];
         }
+        if allow_bad_parity {
+            let invs2 = by_row[r1][0].invs + by_row[r2][1].invs;
+            let invs3 = by_row[r1][1].invs + by_row[r2][0].invs;
+            if invs2 < invs0 && invs2 < invs1 && invs2 < invs3 {
+                res[r1] = by_row[r1][0];
+                res[r2] = by_row[r2][1];
+            } else if invs3 < invs0 && invs3 < invs1 {
+                res[r1] = by_row[r1][1];
+                res[r2] = by_row[r2][0];
+            }
+        }
         assert!(res[r1] != Split::INF);
         assert!(res[r2] != Split::INF);
     }
@@ -250,7 +278,7 @@ fn get_best_splits(state: &State, a: &[usize]) -> Vec<Split> {
 
 fn make_correct_perm(state: &State, sol: &mut TaskSolution) -> bool {
     state.ensure_correct_rows(sol);
-    let best_splits = get_best_splits(state, &sol.state);
+    let best_splits = get_best_splits(state, &sol.state, false);
     for r in 0..state.n_rows / 2 {
         let invs1 = best_splits[r].invs;
         let invs2 = best_splits[state.n_rows - r - 1].invs;
@@ -259,7 +287,7 @@ fn make_correct_perm(state: &State, sol: &mut TaskSolution) -> bool {
         }
     }
     loop {
-        let best_splits = get_best_splits(state, &sol.state);
+        let best_splits = get_best_splits(state, &sol.state, false);
         let should_swap = |r: usize, c: usize| -> bool {
             let split = best_splits[r];
             if (c + 1) % state.n_cols == split.pos {
@@ -349,8 +377,8 @@ fn final_rows_move(state: &State, sol: &mut TaskSolution) {
     }
 }
 
-fn get_perms_moves_estimate(a: &[usize], state: &State) -> usize {
-    let best_splits = get_best_splits(state, a);
+fn get_perms_moves_estimate(a: &[usize], state: &State, allow_bad_parity: bool) -> usize {
+    let best_splits = get_best_splits(state, a, allow_bad_parity);
     let mut res = 0;
     for r in 0..state.n_rows / 2 {
         let invs1 = best_splits[r].invs;
@@ -400,7 +428,7 @@ fn is_almost_id_perm(a: &[usize]) -> bool {
 }
 
 fn try_improve_num_perms(state: &State, sol: &mut TaskSolution) {
-    let mut estimate = get_perms_moves_estimate(&sol.state, state);
+    let mut estimate = get_perms_moves_estimate(&sol.state, state, false);
     eprintln!("Estimate: {}", estimate);
     state.ensure_correct_rows(sol);
 
@@ -445,7 +473,7 @@ fn try_improve_num_perms(state: &State, sol: &mut TaskSolution) {
             }
 
             state.ensure_correct_rows(&nsol);
-            let new_estimate = get_perms_moves_estimate(&nsol.state, state);
+            let new_estimate = get_perms_moves_estimate(&nsol.state, state, false);
             eprintln!("New Estimate: {}", new_estimate);
             if new_estimate + nsol.answer.len() < estimate + sol.answer.len() {
                 eprintln!("Apply: {} -> {}", estimate, new_estimate);
@@ -490,7 +518,13 @@ pub fn solve_globe_jaapsch(data: &Data, task_type: &str, log: &mut SolutionsLog)
             // sol.state = (0..state.n()).collect();
             // state.show_state(&sol.state);
 
-            // state.move_rotate(sol, 1);
+            // state.move_rotate(sol, 0);
+            // state.move_row_right(sol, 0, 1);
+            // state.move_rotate(sol, 0);
+            // state.move_rotate(sol, 2);
+            // state.move_row_right(sol, 0, 2);
+            // state.move_rotate(sol, 2);
+
             // state.move_rotate(sol, 2);
             // state.move_rotate(sol, 1);
             // state.move_rotate(sol, 2);
