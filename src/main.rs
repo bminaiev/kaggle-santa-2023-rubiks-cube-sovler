@@ -23,6 +23,7 @@ use crate::{
     submission_combiner::make_submission,
     to_cube3_converter::Cube3Converter,
     utils::{get_all_perms, get_blocks},
+    wreath_solver::solve_wreath,
 };
 
 pub mod checker;
@@ -49,6 +50,7 @@ pub mod to_cube3_converter;
 pub mod triangle_solver;
 pub mod triangles_parity;
 pub mod utils;
+pub mod wreath_solver;
 
 fn calc_hash(a: &[usize]) -> u64 {
     let mut hasher = DefaultHasher::new();
@@ -485,7 +487,7 @@ fn main() {
     let data = load_data();
 
     let mut log = SolutionsLog::new();
-    make_submission(&data, &log);
+    // make_submission(&data, &log);
 
     // analyze_puzzle_type(&data, "cube_3/3/3");
     // analyze_permuations(&data);
@@ -509,4 +511,6 @@ fn main() {
 
     // show_globe(&data);
     // solve_globe_jaapsch(&data, "globe_", &mut log);
+
+    solve_wreath(&data, &mut log);
 }
