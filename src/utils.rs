@@ -157,3 +157,15 @@ pub fn show_cube_ids(ids: &[usize], sz: usize) {
         print_border();
     }
 }
+
+pub fn calc_num_invs(a: &[usize]) -> usize {
+    let mut res = 0;
+    for i in 0..a.len() {
+        for j in i + 1..a.len() {
+            if a[j] < a[i] {
+                res += 1;
+            }
+        }
+    }
+    res
+}
