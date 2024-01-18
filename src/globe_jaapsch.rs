@@ -606,12 +606,7 @@ fn pick_random_perm(n: usize, rng: &mut StdRng) -> Vec<usize> {
     a
 }
 
-fn solve_two_rows(
-    state: &State,
-    sol: &mut TaskSolution,
-    r1: usize,
-    rng: &mut StdRng,
-) -> MatchingResult {
+fn solve_two_rows(state: &State, sol: &mut TaskSolution, r1: usize, rng: &mut StdRng) {
     state.ensure_correct_rows(sol);
     let r2 = state.n_rows - r1 - 1;
     eprintln!("Start state: (r1 = {r1}, r2 = {r2})");
@@ -623,60 +618,64 @@ fn solve_two_rows(
             a[row_id][c] = sol.state[state.rc_to_index(row, c)];
         }
     }
-    show_table(&a);
 
-    let (min_invs, perms) = find_best(rng, a.clone());
-    let mut rev = false;
-    for perm in perms.iter() {
-        eprintln!("Perm: {perm:?}");
-        let mut pairs = vec![vec![0; state.n()]; state.n()];
-        for i in 0..a[0].len() {
-            let j = perm[i];
-            if rev {
-                pairs[a[1][j]][a[0][i]] += 1;
-            } else {
-                pairs[a[0][i]][a[1][j]] += 1;
-                eprintln!("Want to swap {} and {}", a[0][i], a[1][j]);
+    let (min_invs, perms) = find_best(rng, a.clone(), state);
+    let res = calc_perms_score(&a, &perms, state);
+
+    for mv in res.moves.iter() {
+        match mv {
+            &MyMove::Rotate(c) => {
+                state.move_rotate(sol, c + 1);
+                state.move_row_right(sol, r1, 1);
+                state.move_rotate(sol, c + 1);
+            }
+            MyMove::BottomRowRight => {
+                state.move_row_right(sol, r2, 1);
             }
         }
-        let moves = apply_matching(a.clone(), pairs, state).unwrap();
-        for mv in moves.moves.iter() {
-            match mv {
-                MyMove::Rotate(c) => {
-                    state.move_rotate(sol, *c);
-                }
-                MyMove::BottomRowRight => {
-                    let row = [r2, r1][rev as usize];
-                    eprintln!("Moving row {row}");
-                    state.move_row_right(sol, row, 1);
-                }
-            }
-        }
-        a = apply_p1_p2(a, &[perm.clone()]);
-        rev = !rev;
-
-        eprintln!("After applying perm: {perm:?}");
-        eprintln!("Expected a:");
-        show_table(&a);
-        eprintln!("Real state:");
-        state.show_state(&sol.state);
     }
 
+    eprintln!("Real state:");
+    state.show_state(&sol.state);
+
     eprintln!("Min invs: {min_invs}");
-    unreachable!()
 }
 
-fn find_best(rng: &mut StdRng, a: Vec<Vec<usize>>) -> (usize, Vec<Vec<usize>>) {
+fn convert_perm_to_matching(
+    a: &[Vec<usize>],
+    perm: &[usize],
+    n: usize,
+    rev: bool,
+) -> Vec<Vec<usize>> {
+    let mut pairs = vec![vec![0; n]; n];
+    for i in 0..a[0].len() {
+        let j = perm[i];
+        // pairs[a[1][j]][a[0][i]] += 1;
+        pairs[a[0][i]][a[1][j]] += 1;
+    }
+    if rev {
+        for i in 0..pairs.len() {
+            for j in i + 1..pairs.len() {
+                let tmp = pairs[i][j];
+                pairs[i][j] = pairs[j][i];
+                pairs[j][i] = tmp;
+            }
+        }
+    }
+    pairs
+}
+
+fn find_best(rng: &mut StdRng, a: Vec<Vec<usize>>, state: &State) -> (usize, Vec<Vec<usize>>) {
     let sz = a[0].len();
     let mut ps: Vec<_> = (0..2).map(|_| pick_random_perm(sz, rng)).collect();
 
-    let na2 = apply_p1_p2(a.clone(), &ps);
+    let na2 = calc_perms_score(&a, &ps, state).a;
     let mut prev_score = calc_invs_score(&na2);
     let start_invs = prev_score;
     let mut best = (prev_score, ps.clone());
 
     // TODO: change
-    const MAX_SEC: f64 = 0.0;
+    const MAX_SEC: f64 = 20.0;
     let temp_start = 10.0f64;
     let temp_end = 0.2f64;
     let start = Instant::now();
@@ -692,8 +691,8 @@ fn find_best(rng: &mut StdRng, a: Vec<Vec<usize>>) -> (usize, Vec<Vec<usize>>) {
         let pos2 = rng.gen_range(0..sz);
         let mut ps2 = ps.clone();
         ps2[id].swap(pos1, pos2);
-        let na3 = apply_p1_p2(a.clone(), &ps2);
-        let new_score = calc_invs_score(&na3);
+        let na3 = calc_perms_score(&a, &ps2, state);
+        let new_score = calc_invs_score(&na3.a);
         if new_score < best.0 {
             best = (new_score, ps2.clone());
         }
@@ -713,6 +712,18 @@ fn find_best(rng: &mut StdRng, a: Vec<Vec<usize>>) -> (usize, Vec<Vec<usize>>) {
     );
 
     best
+}
+
+fn calc_perms_score(a: &[Vec<usize>], perms: &[Vec<usize>], state: &State) -> MatchingResult {
+    let pairs0 = convert_perm_to_matching(a, &perms[0], state.n(), false);
+    let pairs1 = convert_perm_to_matching(a, &perms[1], state.n(), true);
+
+    let mut res = apply_matching(a.to_vec(), pairs0, state).unwrap();
+    let mut res2 = apply_matching(res.a, pairs1, state).unwrap();
+
+    res.moves.extend(res2.moves);
+    res2.moves = res.moves;
+    res2
 }
 
 fn calc_invs_score(a: &[Vec<usize>]) -> usize {
@@ -753,6 +764,7 @@ fn is_valid_rows(a: &[Vec<usize>], need_switches: &[[usize; 2]]) -> bool {
 struct MatchingResult {
     moves: Vec<MyMove>,
     tot_invs: usize,
+    a: Vec<Vec<usize>>,
 }
 
 fn apply_matching(
@@ -763,13 +775,14 @@ fn apply_matching(
     let mut right_moves = 0;
     let mut moves = vec![];
     let cnt_move = state.n_cols / 2 - 1;
+    let mut need_more: usize = pairs.iter().map(|p| p.iter().sum::<usize>()).sum();
     loop {
         if right_moves > 10 * state.n_cols {
             // eprintln!("Too many right moves!");
             return None;
         }
-        if pairs.iter().all(|p| p.iter().all(|&x| x == 0)) {
-            eprintln!("All done!");
+        if need_more == 0 {
+            // eprintln!("All done!");
             break;
         }
         let mut changed = false;
@@ -779,32 +792,34 @@ fn apply_matching(
             let v2 = a[1][c2];
             if pairs[v1][v2] > 0 {
                 moves.push(MyMove::Rotate(c1));
-                eprintln!("Switch {v1} and {v2}");
+                // eprintln!("Switch {v1} and {v2}");
                 changed = true;
                 a[0][c1] = v2;
                 a[1][c2] = v1;
                 move_cycle_subsegm_right(&mut a[0], c1, cnt_move);
                 move_cycle_subsegm_left(&mut a[1], c2, cnt_move);
                 pairs[v1][v2] -= 1;
-                show_table(&a);
+                // show_table(&a);
+                need_more -= 1;
             }
         }
         if !changed {
-            eprintln!("Move second row right...");
+            // eprintln!("Move second row right...");
             a[1].rotate_right(1);
-            show_table(&a);
+            // show_table(&a);
             moves.push(MyMove::BottomRowRight);
             right_moves += 1;
         }
     }
-    eprintln!("After matchin I expect:");
-    show_table(&a);
+    // eprintln!("After matchin I expect:");
+    // show_table(&a);
     let inv1 = calc_num_invs(&a[0]);
     let inv2 = calc_num_invs(&a[1]);
     // eprintln!("Total invs: {} + {} = {}", inv1, inv2, inv1 + inv2);
     Some(MatchingResult {
         moves,
         tot_invs: inv1 + inv2,
+        a,
     })
 }
 
@@ -882,7 +897,7 @@ fn generate_all_perms(n: usize, cur: &mut Vec<usize>, res: &mut Vec<Vec<usize>>)
 pub fn solve_globe_jaapsch(data: &Data, task_type: &str, log: &mut SolutionsLog) {
     let mut solutions = TaskSolution::all_by_type(data, task_type, false);
     eprintln!("Number of tasks: {}", solutions.len());
-    solutions.truncate(1);
+    // solutions.truncate(1);
 
     let mut rng = StdRng::seed_from_u64(7854334);
 
@@ -929,7 +944,7 @@ pub fn solve_globe_jaapsch(data: &Data, task_type: &str, log: &mut SolutionsLog)
         // state.show_state(&sol.state);
         assert!(sol.is_solved());
         eprintln!("Sol len: {}", sol.answer.len());
-        // log.append(sol);
+        log.append(sol);
     }
 }
 
