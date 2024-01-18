@@ -510,7 +510,7 @@ fn main() {
     // solve3(&data, "cube_3/3/3");
 
     // show_globe(&data);
-    solve_globe_jaapsch(&data, "globe_3/33", &mut log);
+    solve_globe_jaapsch(&data, "globe_3/4", &mut log);
 
     // solve_wreath(&data, &mut log);
 }
