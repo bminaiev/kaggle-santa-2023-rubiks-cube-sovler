@@ -48,10 +48,24 @@ fn save_submission(tasks: &[TaskSolution]) {
     }
 
     use std::io::Write;
-    let mut f = File::create(format!("data/my_sub_{}k.csv", cost / 1000)).unwrap();
+    let name = format!("data/my_{}k.csv", cost / 1000);
+    let mut f = File::create(&name).unwrap();
     writeln!(f, "id,moves").unwrap();
     for task in tasks.iter() {
         writeln!(f, "{},{}", task.task_id, task.answer.join(".")).unwrap();
+    }
+
+    let mut f_log = File::create(name + ".txt").unwrap();
+    for task in tasks.iter() {
+        writeln!(
+            f_log,
+            "id={}\t{}({}).\t{}",
+            task.task_id,
+            task.task.puzzle_type,
+            task.task.get_color_type(),
+            task.answer.len()
+        )
+        .unwrap();
     }
 }
 
@@ -98,7 +112,7 @@ pub fn make_submission(data: &Data, log: &SolutionsLog) {
     for idx in events_perm.into_iter() {
         let event = &log.events[idx];
         let task = event.to_task(data);
-        if !task.is_solved() {
+        if !task.is_solved_with_wildcards() {
             continue;
         }
         let task_id = task.task_id;

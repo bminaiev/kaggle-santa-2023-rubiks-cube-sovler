@@ -36,7 +36,7 @@ impl Permutation {
         self.combine(self)
     }
 
-    pub fn apply(&self, a: &mut [usize]) {
+    pub fn apply<T>(&self, a: &mut [T]) {
         for cycle in self.cycles.iter() {
             for w in cycle.windows(2) {
                 a.swap(w[0], w[1]);
