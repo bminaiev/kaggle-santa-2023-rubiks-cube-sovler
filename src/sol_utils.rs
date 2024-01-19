@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use crate::{data::Data, puzzle::Puzzle, utils::get_start_permutation};
 
 #[derive(Clone)]
@@ -56,6 +58,19 @@ impl TaskSolution {
         }
         assert!(!solutions.is_empty());
         solutions
+    }
+
+    pub fn from_solutions_file(data: &Data, solutions: &BTreeMap<usize, Vec<String>>) -> Vec<Self> {
+        let mut res = vec![];
+        for (&task_id, sol) in solutions.iter() {
+            let mut task = TaskSolution::new(data, task_id);
+            for mv in sol.iter() {
+                task.append_move(mv);
+            }
+            assert!(task.is_solved_with_wildcards());
+            res.push(task);
+        }
+        res
     }
 
     pub fn print(&self, data: &Data) {

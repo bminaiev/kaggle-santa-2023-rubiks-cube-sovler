@@ -420,7 +420,7 @@ pub fn solve_nnn(
     let mut solutions = TaskSolution::all_by_type(data, task_type, exact_perm);
     // solutions.reverse();
     eprintln!("Tasks cnt: {}", solutions.len());
-    // solutions.truncate(1);
+    solutions.truncate(1);
     let task_id = solutions[0].task_id;
     eprintln!("Solving id={task_id}");
 

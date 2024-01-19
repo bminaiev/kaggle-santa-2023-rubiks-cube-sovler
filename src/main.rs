@@ -9,6 +9,7 @@ use std::{
 use rand::{seq::SliceRandom, Rng};
 
 use crate::{
+    cube_ab::cube_ab_solver,
     data::{load_data, Data},
     globe_jaapsch::solve_globe_jaapsch,
     moves::SeveralMoves,
@@ -27,6 +28,7 @@ use crate::{
 };
 
 pub mod checker;
+pub mod cube_ab;
 pub mod cube_edges_calculator;
 pub mod data;
 pub mod dsu;
@@ -494,14 +496,14 @@ fn main() {
 
     // show_info(&data);
 
-    // let exact_perm = true;
+    // let exact_perm = false;
     // let cube3_converter = Cube3Converter::new(Solver3::new(&data, exact_perm));
 
     // fix_permutations_in_log(&data, "cube_5/5/5", &mut log, &cube3_converter);
 
     // solve_nnn(
     //     &data,
-    //     "cube_33/33/33",
+    //     "cube_10/10/10",
     //     &cube3_converter,
     //     exact_perm,
     //     &mut log,
@@ -513,4 +515,6 @@ fn main() {
     // solve_globe_jaapsch(&data, "globe_", &mut log);
 
     // solve_wreath(&data, &mut log);
+
+    // cube_ab_solver(&data);
 }

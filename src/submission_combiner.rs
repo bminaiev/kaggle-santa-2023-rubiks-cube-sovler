@@ -43,8 +43,20 @@ fn get_task_type(s: &str) -> &str {
 fn save_submission(tasks: &[TaskSolution]) {
     let cost = tasks.iter().map(|t| t.answer.len()).sum::<usize>();
     eprintln!("Total cost: {}", cost);
+
+    let mut hm = HashMap::<String, usize>::new();
     for task in tasks.iter() {
         assert!(task.is_solved_with_wildcards());
+
+        let task_name = format!(
+            "{}_{}",
+            get_task_type(&task.task.puzzle_type),
+            task.task.get_color_type()
+        );
+        *hm.entry(task_name).or_default() += task.answer.len();
+    }
+    for (k, v) in hm.iter() {
+        println!("{} -> {}", k, v);
     }
 
     use std::io::Write;
@@ -70,37 +82,21 @@ fn save_submission(tasks: &[TaskSolution]) {
 }
 
 pub fn make_submission(data: &Data, log: &SolutionsLog) {
-    let mut hm = HashMap::<String, usize>::new();
-
     for task in data.puzzles.iter() {
         let sample_sol_len = data.solutions.sample[&task.id].len();
         let s853k_sol_len = data.solutions.s853k[&task.id].len();
         let s200k_est = score_200k_estimator(&task.puzzle_type, data).unwrap_or_default();
         let color_type = task.get_color_type();
         let task_name = format!("{}_{}", get_task_type(&task.puzzle_type), color_type);
-        *hm.entry(task_name).or_default() += data.solutions.my_369k[&task.id].len();
+
         eprintln!(
             "Task {}. Type: {}. Colors: {color_type}. Sample len: {sample_sol_len}. 853k: {s853k_sol_len}. 200k: {s200k_est}",
             task.id,
             task.puzzle_type,
         );
     }
-    for (k, v) in hm.iter() {
-        println!("{} -> {}", k, v);
-    }
 
-    let mut tasks: Vec<_> = data
-        .solutions
-        .s853k
-        .iter()
-        .map(|(&task_id, sol)| {
-            let mut task = TaskSolution::new(data, task_id);
-            for mv in sol.iter() {
-                task.append_move(mv);
-            }
-            task
-        })
-        .collect();
+    let mut tasks: Vec<_> = TaskSolution::from_solutions_file(data, &data.solutions.s853k);
     for i in 0..tasks.len() {
         assert_eq!(tasks[i].task_id, i);
     }
@@ -126,6 +122,20 @@ pub fn make_submission(data: &Data, log: &SolutionsLog) {
                 task.answer.len()
             );
             tasks[task_id] = task;
+        }
+    }
+    let tasks_ab = TaskSolution::from_solutions_file(data, &data.solutions.ab);
+    for id in 0..tasks.len() {
+        if tasks_ab[id].answer.len() < tasks[id].answer.len() {
+            eprintln!(
+                "Wow! Better AB solution for task {} ({}, {}). {} -> {}",
+                id,
+                tasks[id].task.puzzle_type,
+                tasks[id].task.get_color_type(),
+                tasks[id].answer.len(),
+                tasks_ab[id].answer.len()
+            );
+            tasks[id] = tasks_ab[id].clone();
         }
     }
     eprintln!("New sum scores: {}", calc_scores(&tasks));
