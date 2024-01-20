@@ -1,14 +1,6 @@
-use std::{
-    collections::{BTreeSet, HashMap, HashSet},
-    mem::needs_drop,
-    ops::Sub,
-};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
-use rand::seq::SliceRandom;
-use rayon::{
-    iter::{IntoParallelRefIterator, ParallelIterator},
-    vec,
-};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
     cube_edges_calculator::{build_squares, calc_cube_centers, calc_cube_edges, calc_edges_score},
@@ -161,88 +153,6 @@ fn calc_positions(squares: &[Vec<Vec<usize>>], dx: usize, dy: usize) -> Vec<usiz
     res.into_iter().collect::<Vec<_>>()
 }
 
-pub fn solve_subproblem(
-    solutions: &mut [TaskSolution],
-    puzzle_info: &PuzzleType,
-    squares: &[Vec<Vec<usize>>],
-    dx: usize,
-    dy: usize,
-) {
-    if dx == 0 && dy == 0 {
-        solve_subproblem00(solutions, puzzle_info, squares);
-        return;
-    }
-    let mut interesting_positions = calc_positions(squares, dx, dy);
-    // let mut more = calc_positions(squares, 0, 0);
-    // interesting_positions.append(&mut more);
-    let subspace = Subspace::new(interesting_positions);
-    let sz = squares[0].len();
-    let first_sq_positions: Vec<_> = (0..subspace.interesting_positions.len())
-        .filter(|&pos| {
-            let x = subspace.interesting_positions[pos];
-            x > sz * sz && x < sz * sz * 2
-        })
-        .collect();
-    let mut forbidden_moves = vec![];
-    for mv in ["d", "f", "r"] {
-        for sign in ["", "-"] {
-            let name = format!("{sign}{mv}{}", sz / 2);
-            forbidden_moves.push(name);
-        }
-    }
-    eprintln!("FORBIDDEN MOVES: {forbidden_moves:?}");
-    let moves = subspace.get_moves(puzzle_info, &forbidden_moves);
-    eprintln!("Solve subproblem {dx}, {dy}. Moves: {}", moves.len());
-    for mv in moves.iter() {
-        eprintln!("Move: {:?}", mv.name);
-    }
-    for sol in solutions.iter_mut() {
-        let state: Vec<_> = subspace
-            .interesting_positions
-            .iter()
-            .map(|&x| sol.task.solution_state[sol.state[x]])
-            .collect();
-        eprintln!("Before conv: {state:?}");
-        // let state = sol.task.convert_state_to_colors(&state);
-        let target_state = sol
-            .task
-            .convert_state_to_colors(&subspace.interesting_positions);
-        eprintln!("Target state: {target_state:?}");
-        // eprintln!("my state: {state:?}");
-
-        for max_layers in 0.. {
-            eprintln!("max_layers={max_layers}");
-            let dist = |a: &[usize]| -> usize {
-                for &i in first_sq_positions.iter() {
-                    if a[i] != target_state[i] {
-                        return 1;
-                    }
-                }
-                0
-            };
-            let mut moves_history = vec![];
-            if dfs(
-                max_layers,
-                &mut state.clone(),
-                &moves,
-                &dist,
-                &mut 0,
-                &mut moves_history,
-            ) {
-                eprintln!("Found solution in {} moves!", moves_history.len());
-                for &mov_id in moves_history.iter() {
-                    for move_id in moves[mov_id].name.iter() {
-                        let full_perm = &puzzle_info.moves[move_id];
-                        full_perm.apply(&mut sol.state);
-                        sol.answer.push(move_id.clone());
-                    }
-                }
-                break;
-            }
-        }
-    }
-}
-
 pub fn solve_subproblem00(
     solutions: &mut [TaskSolution],
     puzzle_info: &PuzzleType,
@@ -256,13 +166,15 @@ pub fn solve_subproblem00(
         let state: Vec<_> = subspace
             .interesting_positions
             .iter()
-            .map(|&x| sol.task.solution_state[sol.state[x]])
+            .map(|&x| sol.state[x])
             .collect();
         eprintln!("Before conv: {state:?}");
         // let state = sol.task.convert_state_to_colors(&state);
-        let target_state = sol
-            .task
-            .convert_state_to_colors(&subspace.interesting_positions);
+        let target_state: Vec<_> = subspace
+            .interesting_positions
+            .iter()
+            .map(|&pos| sol.target_state[pos])
+            .collect();
         eprintln!("Target state: {target_state:?}");
         // eprintln!("my state: {state:?}");
 
@@ -306,7 +218,7 @@ enum SolutionStage {
     EdgesDone,
 }
 
-fn strip_bad_suffix(sol: &mut TaskSolution, data: &Data) -> SolutionStage {
+fn strip_bad_suffix(sol: &mut TaskSolution, data: &Data, just_centers: bool) -> SolutionStage {
     let old_moves = sol.answer.clone();
     sol.reset(data);
 
@@ -320,15 +232,19 @@ fn strip_bad_suffix(sol: &mut TaskSolution, data: &Data) -> SolutionStage {
 
     for mv in old_moves.iter() {
         sol.append_move(mv);
-        let centers_correct = (0..n).all(|i| !cube_centers[i] || sol.state[i] == i);
+        let centers_correct =
+            (0..n).all(|i| !cube_centers[i] || sol.state[i] == sol.target_state[i]);
         if !centers_correct {
             continue;
         }
         if first_centers_correct == usize::MAX {
             first_centers_correct = sol.answer.len();
+            if just_centers {
+                break;
+            }
         }
-        let edges_score = calc_edges_score(&edges, &sol.state);
-        let edges_correct = (0..edges_score.len()).all(|i| edges_score[i] == edges[i].len() / 2);
+        let edges_score = calc_edges_score(&edges, &sol.state, &sol.target_state);
+        let edges_correct = (0..edges_score.len()).all(|i| edges_score[i] == edges[i].len());
         if edges_correct {
             return SolutionStage::EdgesDone;
         }
@@ -353,6 +269,7 @@ pub fn fix_permutations_in_log(
     for (i, event) in log.events.iter().enumerate() {
         last_event.insert(event.task_id, i);
     }
+    const REDO_EDGES: bool = true;
     for i in 0..log.events.len() {
         let event = &log.events[i];
         if last_event[&event.task_id] != i {
@@ -360,6 +277,9 @@ pub fn fix_permutations_in_log(
         }
         let mut task = TaskSolution::new(data, event.task_id);
         if task.task.puzzle_type != task_type {
+            continue;
+        }
+        if task.task_id != 281 {
             continue;
         }
         eprintln!(
@@ -375,15 +295,17 @@ pub fn fix_permutations_in_log(
         let n = task.task.info.n;
         let sz = calc_cube_side_size(n);
         let correct_positions = task.get_correct_colors_positions();
-        if correct_positions.len() == n {
+        if correct_positions.len() == n && !REDO_EDGES {
             eprintln!("WOW! Correct solution!");
             continue;
         }
         eprintln!("Task type: {}", task.task.get_color_type());
         show_cube_ids(&correct_positions, sz);
-        let stage = strip_bad_suffix(&mut task, data);
+        // TODO: change?
+        let stage = strip_bad_suffix(&mut task, data, REDO_EDGES);
         eprintln!("Stage: {:?}", stage);
         show_cube_ids(&task.get_correct_colors_positions(), sz);
+        eprintln!("Current sol len: {}", task.answer.len());
         match stage {
             SolutionStage::Empty => unreachable!(),
             SolutionStage::CentersDone => {
@@ -418,9 +340,10 @@ pub fn solve_nnn(
     println!("Solving nnn: {task_type}");
 
     let mut solutions = TaskSolution::all_by_type(data, task_type, exact_perm);
+    // let mut solutions: Vec<_> = solutions.into_iter().filter(|t| t.task_id == 282).collect();
     // solutions.reverse();
     eprintln!("Tasks cnt: {}", solutions.len());
-    solutions.truncate(1);
+    // solutions.truncate(1);
     let task_id = solutions[0].task_id;
     eprintln!("Solving id={task_id}");
 
@@ -433,7 +356,7 @@ pub fn solve_nnn(
     let squares = build_squares(sz);
 
     if sz % 2 == 1 {
-        solve_subproblem(&mut solutions, puzzle_info, &squares, 0, 0);
+        solve_subproblem00(&mut solutions, puzzle_info, &squares);
     }
 
     let side_moves = get_cube_side_moves(sz);
@@ -510,32 +433,29 @@ pub fn solve_nnn(
 
     for sol in solutions.iter_mut() {
         // eprintln!("State: {:?}", sol.state);
-        let need_moves = triangle_parity_solver(&sol.state, dsu.get_groups(), sol, sz);
-        for mv in need_moves.iter() {
-            // eprintln!("Need move: {:?}", mv.name);
-            puzzle_info.moves[mv].apply(&mut sol.state);
-            sol.answer.push(mv.to_string());
+        if exact_perm {
+            let need_moves = triangle_parity_solver(&sol.state, dsu.get_groups(), sol, sz);
+            for mv in need_moves.iter() {
+                // eprintln!("Need move: {:?}", mv.name);
+                puzzle_info.moves[mv].apply(&mut sol.state);
+                sol.answer.push(mv.to_string());
+            }
         }
 
-        solve_all_triangles(&triangle_groups, sol);
+        solve_all_triangles(&triangle_groups, sol, exact_perm);
 
         eprintln!("Before solving edges...");
 
         show_ids(&sol.get_correct_colors_positions());
-        eprintln!("IDS:");
-        show_ids(&sol.get_correct_positions());
 
         solve_edges(sol);
 
         sol.print(data);
         show_ids(&sol.get_correct_colors_positions());
-        eprintln!("IDS:");
-        show_ids(&sol.get_correct_positions());
 
         cube3_converter.solve(data, sol, false);
         sol.print(data);
         show_ids(&sol.get_correct_colors_positions());
-        show_ids(&sol.get_correct_positions());
 
         log.append(sol);
     }

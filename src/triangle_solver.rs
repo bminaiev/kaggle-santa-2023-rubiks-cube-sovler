@@ -101,31 +101,32 @@ impl Triangle {
 }
 
 pub struct TriangleGroupSolver {
-    ids: Vec<usize>,
+    positions: Vec<usize>,
+    colors: Vec<usize>,
     d: Vec<Vec<usize>>,
     triangles: Vec<Triangle>,
     pub cur_answer_len: usize,
 }
 
 impl TriangleGroupSolver {
-    pub fn new(triangles: &[Triangle], state: &[usize]) -> Self {
-        let mut ids = vec![];
+    pub fn new(triangles: &[Triangle], start_colors: &[usize], target_colors: &[usize]) -> Self {
+        let mut positions = vec![];
         for tr in triangles.iter() {
             for v in tr.cycle() {
-                ids.push(v);
+                positions.push(v);
             }
         }
-        ids.sort();
-        ids.dedup();
+        positions.sort();
+        positions.dedup();
+        let mut colors: Vec<_> = positions.iter().map(|&x| start_colors[x]).collect();
+        colors.sort();
+        colors.dedup();
 
-        let size = ids.len();
-        let mut d = vec![vec![usize::MAX / 10; size]; size];
-        for i in 0..d.len() {
-            d[i][i] = 0;
-        }
+        let mut d = vec![vec![usize::MAX / 10; colors.len()]; positions.len()];
 
         let mut res = Self {
-            ids,
+            positions,
+            colors,
             d,
             triangles: vec![],
             cur_answer_len: usize::MAX,
@@ -137,7 +138,7 @@ impl TriangleGroupSolver {
                 let cycle = tr.cycle();
                 let mut new_cycle = vec![0; 3];
                 for i in 0..3 {
-                    new_cycle[i] = res.conv_id(cycle[i]);
+                    new_cycle[i] = res.conv_pos(cycle[i]);
                 }
                 Triangle {
                     mv: SeveralMoves {
@@ -153,47 +154,62 @@ impl TriangleGroupSolver {
 
         res.triangles = triangles;
 
-        for tr in res.triangles.iter() {
-            let cycle = tr.cycle();
-            for i in 0..3 {
-                let v = cycle[i];
-                let u = cycle[(i + 1) % 3];
-                res.d[v][u] = 1;
-            }
+        for i in 0..res.positions.len() {
+            let target_color = res.conv_color(target_colors[res.positions[i]]);
+            res.d[i][target_color] = 0;
         }
-        for i in 0..size {
-            for j in 0..size {
-                for k in 0..size {
-                    res.d[i][j] = res.d[i][j].min(res.d[i][k] + res.d[k][j]);
+        loop {
+            let mut changed = false;
+            for tr in res.triangles.iter() {
+                let cycle = tr.cycle();
+                for i in 0..3 {
+                    let v = cycle[i];
+                    let u = cycle[(i + 1) % 3];
+                    for c in 0..res.colors.len() {
+                        if res.d[v][c] > 1 + res.d[u][c] {
+                            res.d[v][c] = 1 + res.d[u][c];
+                            changed = true;
+                        }
+                    }
                 }
+            }
+            if !changed {
+                break;
             }
         }
 
-        res.cur_answer_len = res.solve(state).len();
+        res.cur_answer_len = res.solve(start_colors).len();
 
         res
     }
 
-    pub fn conv_id(&self, x: usize) -> usize {
-        self.ids.binary_search(&x).unwrap()
+    pub fn conv_color(&self, x: usize) -> usize {
+        self.colors.binary_search(&x).unwrap()
+    }
+
+    pub fn conv_pos(&self, x: usize) -> usize {
+        self.positions.binary_search(&x).unwrap()
     }
 
     pub fn score(&self, perm: &[usize]) -> usize {
         let mut res = 0;
-        for i in 0..self.ids.len() {
+        for i in 0..self.positions.len() {
             let value = perm[i];
-            res += self.d[value][i];
+            res += self.d[i][value];
         }
         res
     }
 
-    fn conv_perm(&self, state: &[usize]) -> Vec<usize> {
-        self.ids.iter().map(|&x| self.conv_id(state[x])).collect()
+    fn conv_state(&self, state: &[usize]) -> Vec<usize> {
+        self.positions
+            .iter()
+            .map(|&x| self.conv_color(state[x]))
+            .collect()
     }
 
     pub fn solve(&self, state: &[usize]) -> Vec<usize> {
-        let perm = self.conv_perm(state);
-        assert!(perm_parity(&perm) == 0);
+        let perm = self.conv_state(state);
+        // assert!(perm_parity(&perm) == 0);
         self.a_star(&perm)
     }
 
@@ -242,7 +258,7 @@ impl TriangleGroupSolver {
     }
 
     pub(crate) fn get_dist_estimate(&self, state: &[usize]) -> usize {
-        let perm = self.conv_perm(state);
+        let perm = self.conv_state(state);
         self.score(&perm)
     }
 }

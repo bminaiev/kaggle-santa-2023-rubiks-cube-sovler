@@ -35,6 +35,7 @@ pub mod dsu;
 pub mod edge_solver;
 pub mod globe_jaapsch;
 pub mod groups;
+pub mod kociemba_solver;
 pub mod moves;
 pub mod parallel_triangle_solver;
 pub mod permutation;
@@ -489,21 +490,21 @@ fn main() {
     let data = load_data();
 
     let mut log = SolutionsLog::new();
-    make_submission(&data, &log);
+    // make_submission(&data, &log);
 
     // analyze_puzzle_type(&data, "cube_3/3/3");
     // analyze_permuations(&data);
 
     // show_info(&data);
 
-    // let exact_perm = false;
-    // let cube3_converter = Cube3Converter::new(Solver3::new(&data, exact_perm));
+    let exact_perm = false;
+    let cube3_converter = Cube3Converter::new(Solver3::new(&data, exact_perm));
 
-    // fix_permutations_in_log(&data, "cube_5/5/5", &mut log, &cube3_converter);
+    fix_permutations_in_log(&data, "cube_33/33/33", &mut log, &cube3_converter);
 
     // solve_nnn(
     //     &data,
-    //     "cube_10/10/10",
+    //     "cube_19/19/19",
     //     &cube3_converter,
     //     exact_perm,
     //     &mut log,

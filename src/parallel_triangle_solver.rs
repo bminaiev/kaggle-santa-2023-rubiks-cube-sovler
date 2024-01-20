@@ -11,7 +11,7 @@ struct EstimateChange {
     key: String,
 }
 
-pub fn solve_all_triangles(groups: &[Vec<Triangle>], sol: &mut TaskSolution) {
+pub fn solve_all_triangles(groups: &[Vec<Triangle>], sol: &mut TaskSolution, exact_perm: bool) {
     let puzzle_info = &sol.task.info;
 
     let mut triangles_total_applied = 0;
@@ -27,9 +27,10 @@ pub fn solve_all_triangles(groups: &[Vec<Triangle>], sol: &mut TaskSolution) {
         }
     }
 
+    eprintln!("Create solvers for triangles.");
     let mut solvers: Vec<_> = groups
         .iter()
-        .map(|triangles| TriangleGroupSolver::new(triangles, &sol.state))
+        .map(|triangles| TriangleGroupSolver::new(triangles, &sol.state, &sol.target_state))
         .collect();
 
     eprintln!("Total keys: {}", triangles_by_key.len());

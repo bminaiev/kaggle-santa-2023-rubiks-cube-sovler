@@ -1,3 +1,4 @@
+use core::prelude::v1;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     fmt::format,
@@ -7,7 +8,9 @@ use rand::{rngs::StdRng, seq::SliceRandom, Rng, SeedableRng};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::{
-    cube_edges_calculator::{build_squares, calc_cube_centers, calc_cube_edges, calc_edges_score},
+    cube_edges_calculator::{
+        build_squares, calc_cube_centers, calc_cube_edges, calc_edges_score, viz_edges_score,
+    },
     moves::{rev_move, SeveralMoves},
     permutation::Permutation,
     sol_utils::TaskSolution,
@@ -83,6 +86,9 @@ fn get_possible_moves(sol: &TaskSolution) -> Vec<Vec<SeveralMoves>> {
 }
 
 fn possible_to_make_centers_right(sol: &TaskSolution, state: &[usize]) -> Option<Vec<String>> {
+    if !sol.exact_perm {
+        return Some(vec![]);
+    }
     let n = sol.task.info.n;
     let sz = calc_cube_side_size(n);
     let squares = build_squares(sz);
@@ -152,7 +158,7 @@ fn try_solve_edges(
     for (lvl, possible_moves) in possible_moves.iter().enumerate() {
         eprintln!("Lvl: {lvl}. Cnt moves: {}", possible_moves.len());
         loop {
-            let mut edges_score = calc_edges_score(&edges, &state);
+            let mut edges_score = calc_edges_score(&edges, &state, &sol.target_state);
             loop {
                 // eprintln!("Edges score: {:?}", edges_score);
                 let mut changed = false;
@@ -160,7 +166,7 @@ fn try_solve_edges(
                 for mv in possible_moves.iter() {
                     let mut new_state = state.clone();
                     mv.permutation.apply(&mut new_state);
-                    let new_edges_score = calc_edges_score(&edges, &new_state);
+                    let new_edges_score = calc_edges_score(&edges, &new_state, &sol.target_state);
                     if new_edges_score > edges_score {
                         edges_score = new_edges_score;
                         eprintln!("New edges score: {edges_score:?}");
@@ -176,7 +182,7 @@ fn try_solve_edges(
                     break;
                 }
             }
-            if edges_score[lvl] == edges[lvl].len() / 2 {
+            if edges_score[lvl] == edges[lvl].len() {
                 eprintln!("FOUND SOLUTION FOR LVL: {lvl}");
                 break;
             }
@@ -195,7 +201,15 @@ fn try_solve_edges(
                 for mv in side_moves.iter() {
                     let mut new_state = cur_state.clone();
                     puzzle_info.moves[mv].apply(&mut new_state);
-                    assert_eq!(calc_edges_score(&edges, &new_state), edges_score);
+                    let new_edges_score = calc_edges_score(&edges, &new_state, &sol.target_state);
+                    if new_edges_score != edges_score {
+                        eprintln!("Applied move: {mv}");
+                        eprintln!("Prev edges score: {edges_score:?}");
+                        show_cube_ids(&viz_edges_score(&edges, &cur_state, &sol.target_state), sz);
+                        eprintln!("New edges score: {new_edges_score:?}");
+                        show_cube_ids(&viz_edges_score(&edges, &new_state, &sol.target_state), sz);
+                        unreachable!();
+                    }
                     if seen.contains_key(&new_state) {
                         continue;
                     }
@@ -205,7 +219,8 @@ fn try_solve_edges(
                     for mv2 in possible_moves.iter() {
                         let mut new_state = new_state.clone();
                         mv2.permutation.apply(&mut new_state);
-                        let new_edges_score = calc_edges_score(&edges, &new_state);
+                        let new_edges_score =
+                            calc_edges_score(&edges, &new_state, &sol.target_state);
                         if new_edges_score > edges_score {
                             found = true;
 
@@ -239,29 +254,25 @@ fn try_solve_edges(
                 }
             }
             if !found {
+                if sol.exact_perm || lvl > possible_moves.len() / 2 {
+                    return None;
+                }
                 eprintln!("FAILED TO FIND SOLUTION FOR LVL: {lvl}... Let's try to change parity..");
-                return None;
-                // let nums = get_columns(sz, lvl);
-                // // TODO: try both?
-                // let basic_block = vec![
-                //     "d0".to_string(),
-                //     "d0".to_string(),
-                //     format!("r{}", nums.choose(rng).unwrap()),
-                // ];
-                // let moves = vec![basic_block; 5]
-                //     .into_iter()
-                //     .flatten()
-                //     .collect::<Vec<_>>();
-                // for mv in moves.iter() {
-                //     answer.push(mv.to_string());
-                //     puzzle_info.moves[mv].apply(&mut state);
-                // }
-                // if !(possible_to_make_centers_right(sol, &state).is_some()) {
-                //     eprintln!("FAILED TO FIX PARITY...");
-                //     return None;
-                // }
-
-                // break;
+                let nums = get_columns(sz, lvl);
+                // TODO: try both?
+                let basic_block = vec![
+                    "d0".to_string(),
+                    "d0".to_string(),
+                    format!("r{}", nums.choose(rng).unwrap()),
+                ];
+                let moves = vec![basic_block; 5]
+                    .into_iter()
+                    .flatten()
+                    .collect::<Vec<_>>();
+                for mv in moves.iter() {
+                    answer.push(mv.to_string());
+                    puzzle_info.moves[mv].apply(&mut state);
+                }
             }
         }
     }
@@ -271,11 +282,13 @@ fn try_solve_edges(
 
 pub fn solve_edges(sol: &mut TaskSolution) {
     let possible_moves = get_possible_moves(sol);
-    assert!(possible_to_make_centers_right(sol, &sol.state).is_some());
+    if sol.exact_perm {
+        assert!(possible_to_make_centers_right(sol, &sol.state).is_some());
+    }
 
-    let mut rng = StdRng::seed_from_u64(778818);
+    let mut rng = StdRng::seed_from_u64(34534543);
 
-    for glob_iter in 0..50 {
+    for glob_iter in 0..100 {
         eprintln!("START ITER: {glob_iter}");
 
         if let Some(moves) = try_solve_edges(sol, &mut rng, &possible_moves) {
