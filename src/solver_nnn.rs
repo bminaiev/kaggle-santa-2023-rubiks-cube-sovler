@@ -7,6 +7,7 @@ use crate::{
     data::Data,
     dsu::Dsu,
     edge_solver::solve_edges,
+    greedy::greedy_cube_optimizer,
     moves::SeveralMoves,
     parallel_triangle_solver::solve_all_triangles,
     permutation::Permutation,
@@ -432,6 +433,10 @@ pub fn solve_nnn(
     };
 
     for sol in solutions.iter_mut() {
+        if sol.task_id == 283 {
+            eprintln!("Skipping 283. Exact_perm: {}", sol.exact_perm);
+            continue;
+        }
         // eprintln!("State: {:?}", sol.state);
         if exact_perm {
             let need_moves = triangle_parity_solver(&sol.state, dsu.get_groups(), sol, sz);
@@ -440,6 +445,8 @@ pub fn solve_nnn(
                 puzzle_info.moves[mv].apply(&mut sol.state);
                 sol.answer.push(mv.to_string());
             }
+        } else {
+            greedy_cube_optimizer(sol);
         }
 
         solve_all_triangles(&triangle_groups, sol, exact_perm);

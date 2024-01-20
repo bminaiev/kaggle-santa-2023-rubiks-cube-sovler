@@ -1,3 +1,8 @@
+use std::{
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
+};
+
 use rand::Rng;
 
 use crate::{
@@ -168,4 +173,10 @@ pub fn calc_num_invs(a: &[usize]) -> usize {
         }
     }
     res
+}
+
+pub fn slice_hash<T: Hash>(a: &[T]) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    a.hash(&mut hasher);
+    hasher.finish()
 }

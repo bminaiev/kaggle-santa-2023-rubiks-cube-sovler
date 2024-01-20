@@ -1,6 +1,10 @@
 use std::collections::BTreeMap;
 
-use crate::{data::Data, puzzle::Puzzle, utils::get_start_permutation};
+use crate::{
+    data::Data,
+    puzzle::Puzzle,
+    utils::{calc_cube_side_size, get_start_permutation, show_cube_ids},
+};
 
 #[derive(Clone)]
 pub struct TaskSolution {
@@ -135,5 +139,12 @@ impl TaskSolution {
 
     pub(crate) fn is_solved_with_wildcards(&self) -> bool {
         self.get_correct_colors_positions().len() + self.task.num_wildcards >= self.state.len()
+    }
+
+    pub fn show(&self) {
+        show_cube_ids(
+            &self.get_correct_colors_positions(),
+            calc_cube_side_size(self.state.len()),
+        )
     }
 }

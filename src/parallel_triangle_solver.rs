@@ -60,6 +60,9 @@ pub fn solve_all_triangles(groups: &[Vec<Triangle>], sol: &mut TaskSolution, exa
                         }
                         let cur_dist_estimate = solver.get_dist_estimate(&sol.state);
                         let mut best_dist = 0;
+                        if cur_dist_estimate == 0 {
+                            continue;
+                        }
                         for tr in here_triangles.iter() {
                             let mut new_state = sol.state.clone();
                             tr.mv.permutation.apply(&mut new_state);
@@ -100,6 +103,9 @@ pub fn solve_all_triangles(groups: &[Vec<Triangle>], sol: &mut TaskSolution, exa
                             return None;
                         }
                         let cur_dist_estimate = solver.get_dist_estimate(&sol.state);
+                        if cur_dist_estimate == 0 {
+                            return None;
+                        }
                         let mut best_dist = (0, None);
                         for tr in here_triangles.iter() {
                             let mut new_state = sol.state.clone();
