@@ -1,7 +1,4 @@
-use std::{
-    cmp::{max, min},
-    time::Instant,
-};
+use std::time::Instant;
 
 use rand::{
     rngs::StdRng,
@@ -9,9 +6,7 @@ use rand::{
     Rng, SeedableRng,
 };
 use rayon::{
-    iter::{
-        IntoParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator,
-    },
+    iter::{IntoParallelRefMutIterator, ParallelIterator},
     vec,
 };
 
@@ -139,14 +134,6 @@ impl State {
         let mv = format!("f{col}");
         sol.append_move(&mv);
     }
-
-    fn ensure_correct_rows(&self, sol: &TaskSolution) {
-        for i in 0..self.n() {
-            let (r1, _c1) = self.index_to_rc(i);
-            let (r2, _c2) = self.index_to_rc(sol.state[i]);
-            assert_eq!(r1, r2);
-        }
-    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -154,63 +141,6 @@ struct Swap {
     cost: usize,
     pos1: usize,
     pos2: usize,
-}
-
-fn apply_swap(state: &State, sol: &mut TaskSolution, swap: &Swap) {
-    let (r1, c1) = state.index_to_rc(swap.pos1);
-    let (r2, c2) = state.index_to_rc(swap.pos2);
-    state.move_row_to_pos(sol, r2, c2, c1 + 1);
-    state.move_rotate(sol, c1 + 1);
-    state.move_row_right(sol, r1, 1);
-    state.move_rotate(sol, c1 + 1);
-}
-
-fn move_to_correct_rows(state: &State, sol: &mut TaskSolution) {
-    loop {
-        let mut swaps = vec![];
-        for r1 in 0..state.n_rows / 2 {
-            let r2 = state.n_rows - r1 - 1;
-            for c1 in 0..state.n_cols {
-                let id1 = sol.state[state.rc_to_index(r1, c1)];
-                let expect_row1 = state.index_to_rc(id1).0;
-                if expect_row1 == r1 {
-                    continue;
-                }
-                assert_eq!(expect_row1, r2);
-                for c2 in 0..state.n_cols {
-                    let id2 = sol.state[state.rc_to_index(r2, c2)];
-                    let expect_row2 = state.index_to_rc(id2).0;
-                    if expect_row2 == r2 {
-                        continue;
-                    }
-                    assert_eq!(expect_row2, r1);
-                    let d = state.col_dist(c1 + 1, c2);
-                    let swap = Swap {
-                        cost: d,
-                        pos1: state.rc_to_index(r1, c1),
-                        pos2: state.rc_to_index(r2, c2),
-                    };
-                    swaps.push(swap);
-                }
-            }
-        }
-
-        let cur_estime = get_perms_moves_estimate(&sol.state, state, true);
-        swaps.par_iter_mut().for_each(|swap| {
-            let mut nsol = sol.clone();
-            apply_swap(state, &mut nsol, swap);
-            let new_estimate = get_perms_moves_estimate(&nsol.state, state, true);
-            assert!(new_estimate >= cur_estime);
-            swap.cost += new_estimate - cur_estime;
-        });
-        swaps.sort();
-        if swaps.is_empty() {
-            break;
-        }
-        let swap = swaps[0];
-        apply_swap(state, sol, &swap);
-    }
-    state.ensure_correct_rows(sol);
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -393,214 +323,10 @@ fn final_rows_move(state: &State, sol: &mut TaskSolution) {
     }
 }
 
-fn get_perms_moves_estimate(a: &[usize], state: &State, allow_bad_parity: bool) -> usize {
-    let best_splits = get_best_splits(state, a, allow_bad_parity);
-    let mut res = 0;
-    for r in 0..state.n_rows / 2 {
-        let invs1 = best_splits[r].invs;
-        let invs2 = best_splits[state.n_rows - r - 1].invs;
-        res += invs1.max(invs2);
-    }
-    res * 9
-}
-
-fn apply(sz: usize, cc: &[usize]) -> bool {
-    let mut a = vec![0; sz];
-    for &c in cc.iter() {
-        let mut tmp = vec![0; sz / 2];
-        for i in 0..sz / 2 {
-            tmp[i] = 1 ^ a[(c + i) % sz];
-        }
-        tmp.reverse();
-        for i in 0..sz / 2 {
-            a[(c + i) % sz] = tmp[i];
-        }
-    }
-    a.iter().all(|&x| x == 0)
-}
-
-fn apply_perm(sz: usize, cc: &[usize]) -> Vec<usize> {
-    let mut a: Vec<_> = (0..sz).collect();
-    for &c in cc.iter() {
-        let mut tmp = vec![0; sz / 2];
-        for i in 0..sz / 2 {
-            tmp[i] = a[(c + i) % sz];
-        }
-        tmp.reverse();
-        for i in 0..sz / 2 {
-            a[(c + i) % sz] = tmp[i];
-        }
-    }
-    a
-}
-
-fn is_almost_id_perm(a: &[usize]) -> bool {
-    for i in 0..a.len() {
-        if (a[i] + 1) % a.len() != a[(i + 1) % a.len()] {
-            return false;
-        }
-    }
-    true
-}
-
-fn try_improve_num_perms(state: &State, sol: &mut TaskSolution) {
-    let mut estimate = get_perms_moves_estimate(&sol.state, state, false);
-    eprintln!("Estimate: {}", estimate);
-    state.ensure_correct_rows(sol);
-
-    let mut good_shifts = vec![];
-    let sz = state.n_cols;
-    {
-        let c0 = 0;
-        for c1 in 0..sz {
-            if c0 == c1 {
-                continue;
-            }
-            for c2 in 0..sz {
-                if c1 == c2 {
-                    continue;
-                }
-                for c3 in 0..sz {
-                    if c2 == c3 {
-                        continue;
-                    }
-                    for c4 in 0..sz {
-                        let check = [0, c1, c2, c3, c4];
-                        if apply(sz, &check) {
-                            let perm = apply_perm(sz, &check);
-                            if is_almost_id_perm(&perm) {
-                                continue;
-                            }
-                            eprintln!("WOW! {check:?}. Perm: {perm:?}");
-                            good_shifts.push(check);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    loop {
-        let mut changed = false;
-        for shift in good_shifts.iter() {
-            let mut nsol = sol.clone();
-            for &c in shift.iter() {
-                state.move_rotate(&mut nsol, c);
-            }
-
-            state.ensure_correct_rows(&nsol);
-            let new_estimate = get_perms_moves_estimate(&nsol.state, state, false);
-            eprintln!("New Estimate: {}", new_estimate);
-            if new_estimate + nsol.answer.len() < estimate + sol.answer.len() {
-                eprintln!("Apply: {} -> {}", estimate, new_estimate);
-                *sol = nsol;
-                changed = true;
-                estimate = new_estimate;
-            }
-        }
-        if !changed {
-            break;
-        }
-    }
-}
-
-// fn test(state: &State, sol: &mut TaskSolution) {
-//     sol.state = (0..state.n()).collect();
-//     state.show_state(&sol.state);
-
-//     state.move_rotate(sol, 0);
-//     state.move_row_right(sol, 0, 1);
-//     state.move_rotate(sol, 0);
-
-//     state.show_state(&sol.state);
-// }
-
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
 enum MyMove {
     Rotate(usize),
     BottomRowRight,
-}
-
-fn solve_two_rows123(
-    state: &State,
-    sol: &mut TaskSolution,
-    r1: usize,
-    rng: &mut StdRng,
-) -> MatchingResult {
-    let r2 = state.n_rows - r1 - 1;
-    // [need to switch from the top?; need to switch from the bottom?]
-    let mut need_switches = vec![[0, 0]; state.n()];
-    let mut all_ids = vec![];
-    for &row in [r1, r2].iter() {
-        for col in 0..state.n_cols {
-            let value = sol.state[state.rc_to_index(row, col)];
-            all_ids.push(value);
-            let (r, _c) = state.index_to_rc(value);
-            if r == row {
-                need_switches[value][0] = 1;
-                need_switches[value][1] = 1;
-            } else if row == r1 {
-                need_switches[value][0] = 1;
-            } else {
-                need_switches[value][1] = 1;
-            }
-        }
-    }
-    let mut a = vec![vec![0; state.n_cols]; 2];
-    for row_id in 0..2 {
-        for c in 0..state.n_cols {
-            let row = [r1, r2][row_id];
-            a[row_id][c] = sol.state[state.rc_to_index(row, c)];
-        }
-    }
-    // eprintln!("Created all pairs...");
-    show_table(&a);
-    let mut right_moves = 0;
-    let mut moves = vec![];
-    let cnt_move = state.n_cols / 2 - 1;
-    loop {
-        if right_moves > 10 * state.n_cols {
-            eprintln!("Too many right moves!");
-            unreachable!()
-        }
-        if need_switches.iter().all(|p| p.iter().all(|&x| x == 0)) {
-            eprintln!("All done!");
-            break;
-        }
-        let mut changed = false;
-        for c1 in 0..a[0].len() {
-            let c2 = (c1 + 1) % state.n_cols;
-            let v1 = a[0][c1];
-            let v2 = a[1][c2];
-            if need_switches[v1][0] > 0 && need_switches[v2][1] > 0 {
-                let a_copy = a.clone();
-
-                a[0][c1] = v2;
-                a[1][c2] = v1;
-                move_cycle_subsegm_right(&mut a[0], c1, cnt_move);
-                move_cycle_subsegm_left(&mut a[1], c2, cnt_move);
-                need_switches[v1][0] -= 1;
-                need_switches[v2][1] -= 1;
-                if is_valid_rows(&a, &need_switches) {
-                    eprintln!("Switch {v1} and {v2}");
-                    changed = true;
-                    moves.push(MyMove::Rotate(c1));
-                    show_table2(&a, &need_switches);
-                } else {
-                    a = a_copy;
-                    need_switches[v1][0] += 1;
-                    need_switches[v2][1] += 1;
-                }
-            }
-        }
-        if !changed {
-            eprintln!("Move second row right...");
-            a[1].rotate_right(1);
-            moves.push(MyMove::BottomRowRight);
-            right_moves += 1;
-        }
-    }
-    unreachable!()
 }
 
 fn pick_random_perm(n: usize, rng: &mut StdRng) -> Vec<usize> {
@@ -661,21 +387,6 @@ fn solve_two_rows(state: &State, sol: &mut TaskSolution, r1: usize, rng: &mut St
     // eprintln!("Min invs: {}", res.tot_invs);
 }
 
-fn convert_perm_to_matching(a: &[Vec<usize>], perm: &[usize], n: usize, rev: bool) -> Vec<usize> {
-    let mut pairs = vec![usize::MAX; n];
-    for i in 0..a[0].len() {
-        let j = perm[i];
-        let x = a[0][i];
-        let y = a[1][j];
-        if rev {
-            pairs[y] = x;
-        } else {
-            pairs[x] = y;
-        }
-    }
-    pairs
-}
-
 #[derive(Clone)]
 struct Stage {
     in_row: Vec<Vec<usize>>,
@@ -722,12 +433,9 @@ impl SolutionInfo {
         let tot_invs =
             calc_num_invs_cycle(&real_colors[..sz]).max(calc_num_invs_cycle(&real_colors[sz..]));
 
-        // TODO: eval tot_invs
         MatchingResult {
             moves: all_moves,
             tot_invs,
-            a0,
-            a1,
         }
     }
 }
@@ -805,98 +513,17 @@ fn find_best(rng: &mut StdRng, init_colors: &[usize], row_by_color: &[usize]) ->
     best.1.eval()
 }
 
-// pub fn test_globe_solver(data: &Data) {
-//     eprintln!("Test globe solver!");
-//     let puzzle_type = "globe_3/33";
-//     let puzzle_type = &data.puzzle_info[&puzzle_type.to_owned()];
-//     let mut state = State::new(puzzle_type);
-//     let mut rng = StdRng::seed_from_u64(42);
-//     let mut start = Instant::now();
-//     let mut iters = 0;
-//     while start.elapsed().as_secs_f64() < 1.0 {
-//         let mut perms = vec![];
-//         let n = 66;
-//         for _ in 0..2 {
-//             let mut p: Vec<_> = (0..n).collect();
-//             p.shuffle(&mut rng);
-//             perms.push(p);
-//         }
-//         let mut a = vec![];
-//         for row in 0..2 {
-//             let shift = row * n;
-//             let mut p: Vec<_> = (shift..shift + n).collect();
-//             p.shuffle(&mut rng);
-//             a.push(p);
-//         }
-//         let res = calc_perms_score(&a, &perms, &state);
-//         // eprintln!("Res: {}", res.tot_invs);
-//         iters += 1;
-//     }
-//     eprintln!("Total iters: {iters}");
-// }
-
-// fn calc_perms_score(a: &[Vec<usize>], perms: &[Vec<usize>], state: &State) -> MatchingResult {
-//     let pairs0 = convert_perm_to_matching(a, &perms[0], state.n(), false);
-//     // let pairs1 = convert_perm_to_matching(a, &perms[1], state.n(), true);
-
-//     let mut res = apply_matching(&mut a[0].to_vec(), &mut a[1].to_vec(), pairs0, state).unwrap();
-//     // let mut res2 = apply_matching(res.a, pairs1, state).unwrap();
-
-//     res
-//     // res.moves.extend(res2.moves);
-//     // res2.moves = res.moves;
-//     // res2
-// }
-
-fn calc_invs_score(a: &[Vec<usize>]) -> usize {
-    calc_num_invs_cycle(&a[0]).max(calc_num_invs_cycle(&a[1]))
-}
-
-fn apply_p1_p2(mut a: Vec<Vec<usize>>, ps: &[Vec<usize>]) -> Vec<Vec<usize>> {
-    let sz = a[0].len();
-    for p in ps.iter() {
-        let mut na = vec![vec![0; sz]; 2];
-        for i in 0..sz {
-            let j = p[i];
-            na[0][j] = a[0][i];
-            na[1][i] = a[1][j];
-        }
-        a = na;
-    }
-    a
-}
-
-fn is_valid_rows(a: &[Vec<usize>], need_switches: &[[usize; 2]]) -> bool {
-    for row_id in 0..1 {
-        let mut stay = vec![];
-        for c in 0..a[0].len() {
-            let v = a[row_id][c];
-            if need_switches[v][row_id] > 0 {
-                continue;
-            }
-            stay.push(v);
-        }
-        if calc_num_invs_cycle(&stay) != 0 {
-            return false;
-        }
-    }
-    true
-}
-
 struct MatchingResult {
     moves: Vec<MyMove>,
     tot_invs: usize,
-    a0: Vec<usize>,
-    a1: Vec<usize>,
 }
 
 fn apply_matching(a0: &mut [usize], a1: &mut [usize], pairs: Vec<usize>) -> Vec<MyMove> {
     let sz = a0.len();
-    let mut right_moves = 0;
     let mut moves = vec![];
     let cnt_move = sz / 2 - 1;
     let mut need_more: usize = pairs.iter().filter(|&&x| x != usize::MAX).count();
-    let column_pairs: Vec<_> = (0..sz).map(|c| (c, (c + 1) % sz)).collect();
+    // let column_pairs: Vec<_> = (0..sz).map(|c| (c, (c + 1) % sz)).collect();
     while need_more > 0 {
         let mut changed = false;
 
@@ -922,7 +549,6 @@ fn apply_matching(a0: &mut [usize], a1: &mut [usize], pairs: Vec<usize>) -> Vec<
         if !changed {
             a1.rotate_right(1);
             moves.push(MyMove::BottomRowRight);
-            right_moves += 1;
         }
     }
     moves
@@ -974,39 +600,6 @@ fn show_table(a: &[Vec<usize>]) {
         eprintln!();
     }
     eprintln!("--------");
-}
-
-fn show_table2(a: &[Vec<usize>], more: &[[usize; 2]]) {
-    eprintln!("--------");
-    for r in 0..a.len() {
-        for c in 0..a[r].len() {
-            let v = a[r][c];
-            let stay = more[v][r] == 0;
-            eprint!(
-                "{}{:2}{} ",
-                if stay { "[" } else { " " },
-                a[r][c],
-                if stay { "]" } else { " " }
-            );
-        }
-        eprintln!();
-    }
-    eprintln!("--------");
-}
-
-fn generate_all_perms(n: usize, cur: &mut Vec<usize>, res: &mut Vec<Vec<usize>>) {
-    if cur.len() == n {
-        res.push(cur.clone());
-        return;
-    }
-    for i in 0..n {
-        if cur.contains(&i) {
-            continue;
-        }
-        cur.push(i);
-        generate_all_perms(n, cur, res);
-        cur.pop();
-    }
 }
 
 // https://www.jaapsch.net/puzzles/master.htm
