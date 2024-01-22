@@ -460,6 +460,25 @@ fn find_best(rng: &mut StdRng, init_colors: &[usize], row_by_color: &[usize]) ->
         stages.push(Stage { in_row: in_row0 });
         stages.push(Stage { in_row: in_row1 });
     }
+    // {
+    //     let mut in_row0 = vec![vec![]; 2];
+    //     let mut in_row1 = vec![vec![]; 2];
+    //     let mut in_row2 = vec![vec![]; 2];
+    //     for row_id in 0..2 {
+    //         for col in 0..sz {
+    //             let idx = row_id * sz + col;
+    //             let correct_row = row_by_color[init_colors[idx]];
+    //             if correct_row != row_id {
+    //                 in_row0[row_id].push(idx);
+    //             }
+    //             in_row1[correct_row].push(idx);
+    //             in_row2[1 - correct_row].push(idx);
+    //         }
+    //     }
+    //     stages.push(Stage { in_row: in_row0 });
+    //     stages.push(Stage { in_row: in_row1 });
+    //     stages.push(Stage { in_row: in_row2 });
+    // }
 
     let perms: Vec<_> = stages
         .iter()
@@ -478,14 +497,29 @@ fn find_best(rng: &mut StdRng, init_colors: &[usize], row_by_color: &[usize]) ->
 
     let mut best = (prev_score, sol_info.clone());
     // // TODO: change
-    const MAX_SEC: f64 = 60.0;
+    const MAX_SEC: f64 = 600.0;
     let temp_start = 10.0f64;
     let temp_end = 0.2f64;
     let start = Instant::now();
+    let log_every = 1.0f64.max(MAX_SEC / 10.0);
+    let mut last_reported = 0.0;
+    let mut iters = 0;
     loop {
         let elapsed_s = start.elapsed().as_secs_f64();
         if elapsed_s > MAX_SEC {
             break;
+        }
+        iters += 1;
+        if elapsed_s > last_reported + log_every {
+            last_reported = elapsed_s;
+            eprintln!(
+                "Elapsed: {:.2} sec. Iters/s: {}, Start score: {}. Score: {}. Best: {}",
+                elapsed_s,
+                iters as f64 / elapsed_s,
+                start_invs,
+                prev_score,
+                best.0
+            );
         }
         let elapsed_frac = elapsed_s / MAX_SEC;
         let temp = temp_start * (temp_end / temp_start).powf(elapsed_frac);
@@ -523,7 +557,6 @@ fn apply_matching(a0: &mut [usize], a1: &mut [usize], pairs: Vec<usize>) -> Vec<
     let mut moves = vec![];
     let cnt_move = sz / 2 - 1;
     let mut need_more: usize = pairs.iter().filter(|&&x| x != usize::MAX).count();
-    // let column_pairs: Vec<_> = (0..sz).map(|c| (c, (c + 1) % sz)).collect();
     while need_more > 0 {
         let mut changed = false;
 
@@ -555,13 +588,24 @@ fn apply_matching(a0: &mut [usize], a1: &mut [usize], pairs: Vec<usize>) -> Vec<
 }
 
 fn calc_num_invs_cycle(a: &[usize]) -> usize {
-    let mut res = usize::MAX;
-    let mut a = a.to_vec();
-    for _ in 0..a.len() {
-        a.rotate_left(1);
-        res = res.min(calc_num_invs(&a));
+    let mut split = vec![0; a.len() + 1];
+    for i in 0..a.len() {
+        for j in i + 1..a.len() {
+            if a[i] < a[j] {
+                split[i + 1] += 1;
+                split[j + 1] -= 1;
+            }
+            if a[i] > a[j] {
+                split[0] += 1;
+                split[i + 1] -= 1;
+                split[j + 1] += 1;
+            }
+        }
     }
-    res
+    for i in 0..split.len() - 1 {
+        split[i + 1] += split[i];
+    }
+    split.iter().min().unwrap().to_owned()
 }
 
 fn move_cycle_subsegm_right<T>(a: &mut [T], to: usize, cnt: usize) {
@@ -603,13 +647,13 @@ fn show_table(a: &[Vec<usize>]) {
 }
 
 // https://www.jaapsch.net/puzzles/master.htm
-pub fn solve_globe_jaapsch(data: &Data, task_type: &str, log: &mut SolutionsLog) {
-    let mut solutions = TaskSolution::all_by_type(data, task_type, false);
+pub fn solve_globe_jaapsch(data: &Data, task_types: &[&str], log: &mut SolutionsLog) {
+    let mut solutions = TaskSolution::all_by_types(data, task_types);
     eprintln!("Number of tasks: {}", solutions.len());
     // solutions.truncate(1);
 
     solutions.par_iter_mut().for_each(|sol| {
-        let mut rng = StdRng::seed_from_u64(7854334);
+        let mut rng = StdRng::seed_from_u64(78534334);
         eprintln!(
             "Solving task {}. Type: {}, {}",
             sol.task_id,

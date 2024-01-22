@@ -494,7 +494,7 @@ fn main() {
     let data = load_data();
 
     let mut log = SolutionsLog::new();
-    make_submission(&data, &log);
+    // make_submission(&data, &log);
 
     // analyze_puzzle_type(&data, "cube_3/3/3");
     // analyze_permuations(&data);
@@ -511,7 +511,7 @@ fn main() {
     // solve3(&data, "cube_3/3/3");
 
     // show_globe(&data);
-    // solve_globe_jaapsch(&data, "globe_", &mut log);
+    // solve_globe_jaapsch(&data, &["globe_3/33"], &mut log);
 
     // solve_wreath(&data, &mut log);
 

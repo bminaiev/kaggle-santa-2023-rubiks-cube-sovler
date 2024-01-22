@@ -104,6 +104,17 @@ impl TaskSolution {
         solutions
     }
 
+    pub fn all_by_types(data: &Data, task_types: &[&str]) -> Vec<Self> {
+        let mut solutions = vec![];
+        for task in data.puzzles.iter() {
+            if task_types.iter().any(|&t| task.puzzle_type.starts_with(t)) {
+                solutions.push(TaskSolution::new(data, task.id))
+            }
+        }
+        assert!(!solutions.is_empty());
+        solutions
+    }
+
     pub fn from_solutions_file(data: &Data, solutions: &BTreeMap<usize, Vec<String>>) -> Vec<Self> {
         let mut res = vec![];
         for (&task_id, sol) in solutions.iter() {
