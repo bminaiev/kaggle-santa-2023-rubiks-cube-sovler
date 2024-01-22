@@ -59,6 +59,12 @@ impl SolutionsLog {
         });
         writeln!(self.f, "{},{}", task.task_id, task.answer.join(".")).unwrap();
         self.f.flush().unwrap();
-        eprintln!("SAVED SOLUTION FOR TASK {}", task.task_id);
+        eprintln!(
+            "SAVED SOLUTION FOR TASK {}. {} ({}). Len = {}.",
+            task.task_id,
+            task.task.puzzle_type,
+            task.task.get_color_type(),
+            task.answer.len()
+        );
     }
 }

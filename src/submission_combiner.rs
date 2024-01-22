@@ -71,7 +71,7 @@ fn save_submission(tasks: &[TaskSolution]) {
     for task in tasks.iter() {
         writeln!(
             f_log,
-            "id={}\t{}({}).\t{}",
+            "{}\t{}({})\t{}",
             task.task_id,
             task.task.puzzle_type,
             task.task.get_color_type(),

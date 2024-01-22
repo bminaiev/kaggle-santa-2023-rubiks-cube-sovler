@@ -467,16 +467,19 @@ fn analyze_permuations(data: &Data) {
 }
 
 fn show_globe(data: &Data) {
-    let task_type = "globe_3/33";
+    let n = 6;
+    let m = 10;
+    let task_type = format!("globe_{n}/{m}");
     let puzzle_info = &data.puzzle_info[&task_type.to_string()];
-    for (k, v) in puzzle_info.moves.iter() {
-        println!("{}: {:?}", k, v.cycles);
-    }
+    // for (k, v) in puzzle_info.moves.iter() {
+    //     println!("{}: {:?}", k, v.cycles);
+    // }
     for task in data.puzzles.iter() {
         if task.puzzle_type == task_type {
-            for r in 0..4 {
-                for c in 0..66 {
-                    print!("{}", task.color_names[task.initial_state[r * 66 + c]]);
+            for r in 0..(n + 1) {
+                for c in 0..(m * 2) {
+                    // print!("{}", task.color_names[task.initial_state[r * 66 + c]]);
+                    print!("{}", task.color_names[task.solution_state[r * (m * 2) + c]]);
                 }
                 println!()
             }
@@ -498,18 +501,12 @@ fn main() {
 
     // show_info(&data);
 
-    let exact_perm = false;
-    let cube3_converter = Cube3Converter::new(Solver3::new(&data, exact_perm));
+    // let exact_perm = false;
+    // let cube3_converter = Cube3Converter::new(Solver3::new(&data, exact_perm));
 
     // fix_permutations_in_log(&data, "cube_33/33/33", &mut log, &cube3_converter);
 
-    // solve_nnn(
-    //     &data,
-    //     "cube_19/19/19",
-    //     &cube3_converter,
-    //     exact_perm,
-    //     &mut log,
-    // );
+    // solve_nnn(&data, "cube_5/5/5", &cube3_converter, exact_perm, &mut log);
 
     // solve3(&data, "cube_3/3/3");
 
@@ -519,4 +516,5 @@ fn main() {
     // solve_wreath(&data, &mut log);
 
     // cube_ab_solver(&data);
+    // test_globe_solver(&data);
 }

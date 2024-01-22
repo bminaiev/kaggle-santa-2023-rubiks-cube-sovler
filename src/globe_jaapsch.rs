@@ -54,17 +54,17 @@ impl State {
         (i / self.n_cols, i % self.n_cols)
     }
 
-    fn show_state(&self, a: &[usize]) {
+    fn show_state(&self, a: &[usize], target_state: &[usize]) {
         eprintln!("--------");
         for r in 0..self.n_rows {
             for c in 0..self.n_cols {
                 let idx = self.rc_to_index(r, c);
-                let correct_row = self.index_to_rc(a[idx]).0 == r;
+                let correct = a[idx] == target_state[idx];
                 eprint!(
                     "{}{:2}{} ",
-                    if correct_row { "[" } else { " " },
+                    if correct { "[" } else { " " },
                     a[idx],
-                    if correct_row { "]" } else { " " }
+                    if correct { "]" } else { " " }
                 );
             }
             eprintln!();
@@ -240,20 +240,7 @@ fn get_best_splits(state: &State, a: &[usize], allow_bad_parity: bool) -> Vec<Sp
             let perm: Vec<_> = (0..state.n_cols)
                 .map(|c| a[state.rc_to_index(row, (c + split) % state.n_cols)])
                 .collect();
-            let mut invs = 0;
-            let mut seen = vec![false; state.n_cols];
-            for &idx in perm.iter() {
-                let (r, c) = state.index_to_rc(idx);
-                if r != row {
-                    continue;
-                }
-                for c2 in c + 1..state.n_cols {
-                    if seen[c2] {
-                        invs += 1;
-                    }
-                }
-                seen[c] = true;
-            }
+            let invs = calc_num_invs(&perm);
             let split = Split { invs, pos: split };
             if by_row[row][invs % 2] > split {
                 by_row[row][invs % 2] = split;
@@ -290,17 +277,19 @@ fn get_best_splits(state: &State, a: &[usize], allow_bad_parity: bool) -> Vec<Sp
 }
 
 fn make_correct_perm(state: &State, sol: &mut TaskSolution) -> bool {
-    state.ensure_correct_rows(sol);
-    let best_splits = get_best_splits(state, &sol.state, false);
-    for r in 0..state.n_rows / 2 {
-        let invs1 = best_splits[r].invs;
-        let invs2 = best_splits[state.n_rows - r - 1].invs;
-        if invs1 % 2 != invs2 % 2 {
-            unreachable!();
+    // state.ensure_correct_rows(sol);
+    let best_splits = get_best_splits(state, &sol.state, !sol.exact_perm);
+    if sol.exact_perm {
+        for r in 0..state.n_rows / 2 {
+            let invs1 = best_splits[r].invs;
+            let invs2 = best_splits[state.n_rows - r - 1].invs;
+            if invs1 % 2 != invs2 % 2 {
+                unreachable!();
+            }
         }
     }
     loop {
-        let best_splits = get_best_splits(state, &sol.state, false);
+        let best_splits = get_best_splits(state, &sol.state, !sol.exact_perm);
         let should_swap = |r: usize, c: usize| -> bool {
             let split = best_splits[r];
             if (c + 1) % state.n_cols == split.pos {
@@ -310,6 +299,16 @@ fn make_correct_perm(state: &State, sol: &mut TaskSolution) -> bool {
             let v2 = sol.state[state.rc_to_index(r, c + 1)];
             v1 > v2
         };
+        let ok_swap = |r: usize, c: usize| -> bool {
+            let split = best_splits[r];
+            if (c + 1) % state.n_cols == split.pos {
+                return false;
+            }
+            let v1 = sol.state[state.rc_to_index(r, c)];
+            let v2 = sol.state[state.rc_to_index(r, c + 1)];
+            sol.exact_perm || v1 == v2
+        };
+
         // let total_num_invs = best_splits.iter().map(|s| s.invs).sum::<usize>();
         // let invs: Vec<_> = best_splits.iter().map(|s| s.invs).collect();
         // eprintln!("Total num invs: {}. {invs:?}", total_num_invs);
@@ -323,25 +322,23 @@ fn make_correct_perm(state: &State, sol: &mut TaskSolution) -> bool {
             if inv1 == 0 && inv2 == 0 {
                 continue;
             }
-            if min(inv1, inv2) == 0 && max(inv1, inv2) == 1 {
-                unreachable!();
-            }
             for c1 in 0..state.n_cols {
-                let id1 = sol.state[state.rc_to_index(r1, c1)];
-                assert_eq!(state.index_to_rc(id1).0, r1);
+                // let id1 = sol.state[state.rc_to_index(r1, c1)];
+                // assert_eq!(state.index_to_rc(id1).0, r1);
                 let sw1 = should_swap(r1, c1);
-                if best_splits[r1].pos == (c1 + 1) % state.n_cols {
-                    continue;
-                }
-                if !sw1 && inv1 != 0 {
-                    continue;
-                }
                 for c2 in 0..state.n_cols {
-                    if best_splits[r2].pos == (c2 + 1) % state.n_cols {
+                    let sw2 = should_swap(r2, c2);
+                    if !sw1 && !sw2 {
                         continue;
                     }
-                    let sw2 = should_swap(r2, c2);
-                    if sw2 || (inv2 == 0 && sw1) {
+                    let mut good = sw1 && sw2;
+                    if inv1 == 0 && ok_swap(r1, c1) {
+                        good = true;
+                    }
+                    if inv2 == 0 && ok_swap(r2, c2) {
+                        good = true;
+                    }
+                    if good {
                         swaps.push(Swap {
                             cost: state.col_dist(c1, c2),
                             pos1: state.rc_to_index(r1, c1),
@@ -372,21 +369,27 @@ fn make_correct_perm(state: &State, sol: &mut TaskSolution) -> bool {
         state.move_row_left(sol, r2, 1);
         state.move_rotate(sol, c1 + 1);
     }
-    eprintln!("Almost solved?");
+    // eprintln!("Almost solved?");
+    // state.show_state(&sol.state, &sol.target_state);
     true
 }
 
 fn final_rows_move(state: &State, sol: &mut TaskSolution) {
     eprintln!("Last moves!");
     for row in 0..state.n_rows {
-        let col = (0..state.n_cols)
-            .find(|&c| {
-                let idx = state.rc_to_index(row, c);
-                let (_r, c) = state.index_to_rc(sol.state[idx]);
-                c == 0
-            })
-            .unwrap();
-        state.move_row_to_pos(sol, row, col, 0);
+        let mut best = (usize::MAX, usize::MAX);
+        for c in 0..state.n_cols {
+            let cur_value = sol.state[state.rc_to_index(row, c)];
+            let prev_value =
+                sol.state[state.rc_to_index(row, (c + state.n_cols - 1) % state.n_cols)];
+            if cur_value != prev_value {
+                let now = (cur_value, c);
+                if now < best {
+                    best = now;
+                }
+            }
+        }
+        state.move_row_to_pos(sol, row, best.1, 0);
     }
 }
 
@@ -501,16 +504,16 @@ fn try_improve_num_perms(state: &State, sol: &mut TaskSolution) {
     }
 }
 
-fn test(state: &State, sol: &mut TaskSolution) {
-    sol.state = (0..state.n()).collect();
-    state.show_state(&sol.state);
+// fn test(state: &State, sol: &mut TaskSolution) {
+//     sol.state = (0..state.n()).collect();
+//     state.show_state(&sol.state);
 
-    state.move_rotate(sol, 0);
-    state.move_row_right(sol, 0, 1);
-    state.move_rotate(sol, 0);
+//     state.move_rotate(sol, 0);
+//     state.move_row_right(sol, 0, 1);
+//     state.move_rotate(sol, 0);
 
-    state.show_state(&sol.state);
-}
+//     state.show_state(&sol.state);
+// }
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
 enum MyMove {
@@ -607,20 +610,37 @@ fn pick_random_perm(n: usize, rng: &mut StdRng) -> Vec<usize> {
 }
 
 fn solve_two_rows(state: &State, sol: &mut TaskSolution, r1: usize, rng: &mut StdRng) {
-    state.ensure_correct_rows(sol);
     let r2 = state.n_rows - r1 - 1;
     eprintln!("Start state: (r1 = {r1}, r2 = {r2})");
-    state.show_state(&sol.state);
-    let mut a = vec![vec![0; state.n_cols]; 2];
+
+    let mut row_by_color = vec![usize::MAX; sol.task.num_colors];
     for row_id in 0..2 {
-        for c in 0..state.n_cols {
-            let row = [r1, r2][row_id];
-            a[row_id][c] = sol.state[state.rc_to_index(row, c)];
+        let mut prev_color = 0;
+        for col in 0..state.n_cols {
+            let target_color = sol.target_state[state.rc_to_index([r1, r2][row_id], col)];
+            assert!(
+                row_by_color[target_color] == usize::MAX || row_by_color[target_color] == row_id
+            );
+            row_by_color[target_color] = row_id;
+            assert!(target_color >= prev_color);
+            prev_color = target_color;
         }
     }
 
-    let (min_invs, perms) = find_best(rng, a.clone(), state);
-    let res = calc_perms_score(&a, &perms, state);
+    // eprintln!("Row by color: {row_by_color:?}");
+
+    // state.show_state(&sol.state, &sol.target_state);
+    let mut init_colors = vec![usize::MAX; state.n_cols * 2];
+    for row_id in 0..2 {
+        for c in 0..state.n_cols {
+            let row = [r1, r2][row_id];
+            init_colors[row_id * state.n_cols + c] = sol.state[state.rc_to_index(row, c)];
+        }
+    }
+
+    // eprintln!("Init colors: {init_colors:?}");
+
+    let res = find_best(rng, &init_colors, &row_by_color);
 
     for mv in res.moves.iter() {
         match mv {
@@ -635,47 +655,122 @@ fn solve_two_rows(state: &State, sol: &mut TaskSolution, r1: usize, rng: &mut St
         }
     }
 
-    eprintln!("Real state:");
-    state.show_state(&sol.state);
+    // eprintln!("Real state:");
+    // state.show_state(&sol.state, &sol.target_state);
 
-    eprintln!("Min invs: {min_invs}");
+    // eprintln!("Min invs: {}", res.tot_invs);
 }
 
-fn convert_perm_to_matching(
-    a: &[Vec<usize>],
-    perm: &[usize],
-    n: usize,
-    rev: bool,
-) -> Vec<Vec<usize>> {
-    let mut pairs = vec![vec![0; n]; n];
+fn convert_perm_to_matching(a: &[Vec<usize>], perm: &[usize], n: usize, rev: bool) -> Vec<usize> {
+    let mut pairs = vec![usize::MAX; n];
     for i in 0..a[0].len() {
         let j = perm[i];
-        // pairs[a[1][j]][a[0][i]] += 1;
-        pairs[a[0][i]][a[1][j]] += 1;
-    }
-    if rev {
-        for i in 0..pairs.len() {
-            for j in i + 1..pairs.len() {
-                let tmp = pairs[i][j];
-                pairs[i][j] = pairs[j][i];
-                pairs[j][i] = tmp;
-            }
+        let x = a[0][i];
+        let y = a[1][j];
+        if rev {
+            pairs[y] = x;
+        } else {
+            pairs[x] = y;
         }
     }
     pairs
 }
 
-fn find_best(rng: &mut StdRng, a: Vec<Vec<usize>>, state: &State) -> (usize, Vec<Vec<usize>>) {
-    let sz = a[0].len();
-    let mut ps: Vec<_> = (0..2).map(|_| pick_random_perm(sz, rng)).collect();
+#[derive(Clone)]
+struct Stage {
+    in_row: Vec<Vec<usize>>,
+}
 
-    let na2 = calc_perms_score(&a, &ps, state).a;
-    let mut prev_score = calc_invs_score(&na2);
+#[derive(Clone)]
+struct SolutionInfo {
+    stages: Vec<Stage>,
+    perms: Vec<Vec<usize>>,
+    row_by_color: Vec<usize>,
+    init_colors: Vec<usize>,
+}
+
+impl SolutionInfo {
+    pub fn eval(&self) -> MatchingResult {
+        let sz = self.init_colors.len() / 2;
+        let mut a0: Vec<_> = (0..sz).collect();
+        let mut a1: Vec<_> = (sz..2 * sz).collect();
+
+        let mut all_moves = vec![];
+
+        for (stage, perm) in self.stages.iter().zip(self.perms.iter()) {
+            let mut pairs = vec![usize::MAX; sz * 2];
+            for i in 0..perm.len() {
+                let x = stage.in_row[0][i];
+                let y = stage.in_row[1][perm[i]];
+                pairs[x] = y;
+            }
+            let stage_moves = apply_matching(&mut a0, &mut a1, pairs);
+            all_moves.extend(stage_moves);
+        }
+
+        let mut real_colors = vec![];
+        for row_id in 0..2 {
+            for col in 0..sz {
+                let v = [&a0, &a1][row_id][col];
+                let color = self.init_colors[v];
+                real_colors.push(color);
+                let correct_row = self.row_by_color[color];
+                assert_eq!(correct_row, row_id);
+            }
+        }
+
+        let tot_invs =
+            calc_num_invs_cycle(&real_colors[..sz]).max(calc_num_invs_cycle(&real_colors[sz..]));
+
+        // TODO: eval tot_invs
+        MatchingResult {
+            moves: all_moves,
+            tot_invs,
+            a0,
+            a1,
+        }
+    }
+}
+
+fn find_best(rng: &mut StdRng, init_colors: &[usize], row_by_color: &[usize]) -> MatchingResult {
+    let sz = init_colors.len() / 2;
+
+    let mut stages = vec![];
+    {
+        let mut in_row0 = vec![vec![]; 2];
+        let mut in_row1 = vec![vec![]; 2];
+        for row_id in 0..2 {
+            for col in 0..sz {
+                let idx = row_id * sz + col;
+                let correct_row = row_by_color[init_colors[idx]];
+                if correct_row == row_id {
+                    in_row0[row_id].push(idx);
+                }
+                in_row1[1 - correct_row].push(idx);
+            }
+        }
+        stages.push(Stage { in_row: in_row0 });
+        stages.push(Stage { in_row: in_row1 });
+    }
+
+    let perms: Vec<_> = stages
+        .iter()
+        .map(|stage| pick_random_perm(stage.in_row[0].len(), rng))
+        .collect();
+
+    let mut sol_info = SolutionInfo {
+        stages,
+        perms,
+        row_by_color: row_by_color.to_vec(),
+        init_colors: init_colors.to_vec(),
+    };
+    let mut prev_score = sol_info.eval().tot_invs;
     let start_invs = prev_score;
-    let mut best = (prev_score, ps.clone());
+    eprintln!("Start invs: {}", prev_score);
 
-    // TODO: change
-    const MAX_SEC: f64 = 20.0;
+    let mut best = (prev_score, sol_info.clone());
+    // // TODO: change
+    const MAX_SEC: f64 = 60.0;
     let temp_start = 10.0f64;
     let temp_end = 0.2f64;
     let start = Instant::now();
@@ -686,45 +781,72 @@ fn find_best(rng: &mut StdRng, a: Vec<Vec<usize>>, state: &State) -> (usize, Vec
         }
         let elapsed_frac = elapsed_s / MAX_SEC;
         let temp = temp_start * (temp_end / temp_start).powf(elapsed_frac);
-        let id = rng.gen_range(0..ps.len());
-        let pos1 = rng.gen_range(0..sz);
-        let pos2 = rng.gen_range(0..sz);
-        let mut ps2 = ps.clone();
-        ps2[id].swap(pos1, pos2);
-        let na3 = calc_perms_score(&a, &ps2, state);
-        let new_score = calc_invs_score(&na3.a);
+        let stage_id = rng.gen_range(0..sol_info.stages.len());
+        let perm_size = sol_info.perms[stage_id].len();
+        let pos1 = rng.gen_range(0..perm_size);
+        let pos2 = rng.gen_range(0..perm_size);
+        sol_info.perms[stage_id].swap(pos1, pos2);
+        let new_score = sol_info.eval().tot_invs;
         if new_score < best.0 {
-            best = (new_score, ps2.clone());
+            best = (new_score, sol_info.clone());
         }
         if new_score < prev_score
             || fastrand::f64() < ((prev_score as f64 - new_score as f64) / temp).exp()
         {
             // Using a new state!
             prev_score = new_score;
-            ps = ps2;
         } else {
             // Rollback
+            sol_info.perms[stage_id].swap(pos1, pos2);
         }
     }
-    eprintln!(
-        "After local opt: {start_invs} -> {prev_score}. Best: {}",
-        best.0
-    );
+    eprintln!("After local opt: {start_invs} -> {prev_score}.",);
 
-    best
+    best.1.eval()
 }
 
-fn calc_perms_score(a: &[Vec<usize>], perms: &[Vec<usize>], state: &State) -> MatchingResult {
-    let pairs0 = convert_perm_to_matching(a, &perms[0], state.n(), false);
-    let pairs1 = convert_perm_to_matching(a, &perms[1], state.n(), true);
+// pub fn test_globe_solver(data: &Data) {
+//     eprintln!("Test globe solver!");
+//     let puzzle_type = "globe_3/33";
+//     let puzzle_type = &data.puzzle_info[&puzzle_type.to_owned()];
+//     let mut state = State::new(puzzle_type);
+//     let mut rng = StdRng::seed_from_u64(42);
+//     let mut start = Instant::now();
+//     let mut iters = 0;
+//     while start.elapsed().as_secs_f64() < 1.0 {
+//         let mut perms = vec![];
+//         let n = 66;
+//         for _ in 0..2 {
+//             let mut p: Vec<_> = (0..n).collect();
+//             p.shuffle(&mut rng);
+//             perms.push(p);
+//         }
+//         let mut a = vec![];
+//         for row in 0..2 {
+//             let shift = row * n;
+//             let mut p: Vec<_> = (shift..shift + n).collect();
+//             p.shuffle(&mut rng);
+//             a.push(p);
+//         }
+//         let res = calc_perms_score(&a, &perms, &state);
+//         // eprintln!("Res: {}", res.tot_invs);
+//         iters += 1;
+//     }
+//     eprintln!("Total iters: {iters}");
+// }
 
-    let mut res = apply_matching(a.to_vec(), pairs0, state).unwrap();
-    let mut res2 = apply_matching(res.a, pairs1, state).unwrap();
+// fn calc_perms_score(a: &[Vec<usize>], perms: &[Vec<usize>], state: &State) -> MatchingResult {
+//     let pairs0 = convert_perm_to_matching(a, &perms[0], state.n(), false);
+//     // let pairs1 = convert_perm_to_matching(a, &perms[1], state.n(), true);
 
-    res.moves.extend(res2.moves);
-    res2.moves = res.moves;
-    res2
-}
+//     let mut res = apply_matching(&mut a[0].to_vec(), &mut a[1].to_vec(), pairs0, state).unwrap();
+//     // let mut res2 = apply_matching(res.a, pairs1, state).unwrap();
+
+//     res
+//     // res.moves.extend(res2.moves);
+//     // res2.moves = res.moves;
+//     // res2
+// }
 
 fn calc_invs_score(a: &[Vec<usize>]) -> usize {
     calc_num_invs_cycle(&a[0]).max(calc_num_invs_cycle(&a[1]))
@@ -764,63 +886,46 @@ fn is_valid_rows(a: &[Vec<usize>], need_switches: &[[usize; 2]]) -> bool {
 struct MatchingResult {
     moves: Vec<MyMove>,
     tot_invs: usize,
-    a: Vec<Vec<usize>>,
+    a0: Vec<usize>,
+    a1: Vec<usize>,
 }
 
-fn apply_matching(
-    mut a: Vec<Vec<usize>>,
-    mut pairs: Vec<Vec<usize>>,
-    state: &State,
-) -> Option<MatchingResult> {
+fn apply_matching(a0: &mut [usize], a1: &mut [usize], pairs: Vec<usize>) -> Vec<MyMove> {
+    let sz = a0.len();
     let mut right_moves = 0;
     let mut moves = vec![];
-    let cnt_move = state.n_cols / 2 - 1;
-    let mut need_more: usize = pairs.iter().map(|p| p.iter().sum::<usize>()).sum();
-    loop {
-        if right_moves > 10 * state.n_cols {
-            // eprintln!("Too many right moves!");
-            return None;
-        }
-        if need_more == 0 {
-            // eprintln!("All done!");
-            break;
-        }
+    let cnt_move = sz / 2 - 1;
+    let mut need_more: usize = pairs.iter().filter(|&&x| x != usize::MAX).count();
+    let column_pairs: Vec<_> = (0..sz).map(|c| (c, (c + 1) % sz)).collect();
+    while need_more > 0 {
         let mut changed = false;
-        for c1 in 0..a[0].len() {
-            let c2 = (c1 + 1) % state.n_cols;
-            let v1 = a[0][c1];
-            let v2 = a[1][c2];
-            if pairs[v1][v2] > 0 {
+
+        let mut do_stuff = |c1: usize, c2: usize| {
+            let v1 = a0[c1];
+            let v2 = a1[c2];
+            if pairs[v1] == v2 {
                 moves.push(MyMove::Rotate(c1));
                 // eprintln!("Switch {v1} and {v2}");
                 changed = true;
-                a[0][c1] = v2;
-                a[1][c2] = v1;
-                move_cycle_subsegm_right(&mut a[0], c1, cnt_move);
-                move_cycle_subsegm_left(&mut a[1], c2, cnt_move);
-                pairs[v1][v2] -= 1;
+                a0[c1] = v2;
+                a1[c2] = v1;
+                move_cycle_subsegm_right(a0, c1, cnt_move);
+                move_cycle_subsegm_left(a1, c2, cnt_move);
                 // show_table(&a);
                 need_more -= 1;
             }
+        };
+
+        for c1 in 0..sz {
+            do_stuff(c1, (c1 + 1) % sz);
         }
         if !changed {
-            // eprintln!("Move second row right...");
-            a[1].rotate_right(1);
-            // show_table(&a);
+            a1.rotate_right(1);
             moves.push(MyMove::BottomRowRight);
             right_moves += 1;
         }
     }
-    // eprintln!("After matchin I expect:");
-    // show_table(&a);
-    let inv1 = calc_num_invs(&a[0]);
-    let inv2 = calc_num_invs(&a[1]);
-    // eprintln!("Total invs: {} + {} = {}", inv1, inv2, inv1 + inv2);
-    Some(MatchingResult {
-        moves,
-        tot_invs: inv1 + inv2,
-        a,
-    })
+    moves
 }
 
 fn calc_num_invs_cycle(a: &[usize]) -> usize {
@@ -833,19 +938,30 @@ fn calc_num_invs_cycle(a: &[usize]) -> usize {
     res
 }
 
-fn move_cycle_subsegm_right(a: &mut [usize], mut to: usize, cnt: usize) {
-    for _ in 0..cnt {
-        let prev = (to + a.len() - 1) % a.len();
-        a.swap(prev, to);
-        to = prev;
+fn move_cycle_subsegm_right<T>(a: &mut [T], to: usize, cnt: usize) {
+    let segm_len = cnt + 1;
+    if segm_len <= to + 1 {
+        let from = to + 1 - segm_len;
+        a[from..to + 1].rotate_right(1);
+    } else {
+        let more = segm_len - (to + 1);
+        a[0..to + 1].rotate_right(1);
+        let sz = a.len();
+        a[sz - more..sz].rotate_right(1);
+        a.swap(0, sz - more);
     }
 }
 
-fn move_cycle_subsegm_left(a: &mut [usize], mut to: usize, cnt: usize) {
-    for _ in 0..cnt {
-        let next = (to + 1) % a.len();
-        a.swap(next, to);
-        to = next;
+fn move_cycle_subsegm_left<T>(a: &mut [T], to: usize, cnt: usize) {
+    let segm_len = cnt + 1;
+    let sz = a.len();
+    if to + segm_len <= sz {
+        a[to..to + segm_len].rotate_left(1);
+    } else {
+        let more = segm_len - (a.len() - to);
+        a[to..sz].rotate_left(1);
+        a[0..more].rotate_left(1);
+        a.swap(more - 1, sz - 1);
     }
 }
 
@@ -899,9 +1015,8 @@ pub fn solve_globe_jaapsch(data: &Data, task_type: &str, log: &mut SolutionsLog)
     eprintln!("Number of tasks: {}", solutions.len());
     // solutions.truncate(1);
 
-    let mut rng = StdRng::seed_from_u64(7854334);
-
-    for sol in solutions.iter_mut() {
+    solutions.par_iter_mut().for_each(|sol| {
+        let mut rng = StdRng::seed_from_u64(7854334);
         eprintln!(
             "Solving task {}. Type: {}, {}",
             sol.task_id,
@@ -916,8 +1031,8 @@ pub fn solve_globe_jaapsch(data: &Data, task_type: &str, log: &mut SolutionsLog)
         for it in 0..500 {
             // eprintln!("START ITER {it}");
             let sol_copy = sol.clone();
-            make_random_moves(&state, sol, &mut rng);
-            move_to_correct_rows(&state, sol);
+            // make_random_moves(&state, sol, &mut rng);
+            // move_to_correct_rows(&state, sol);
 
             eprintln!("Sol len after correct rows: {}", sol.answer.len());
             for r in 0..state.n_rows / 2 {
@@ -938,13 +1053,19 @@ pub fn solve_globe_jaapsch(data: &Data, task_type: &str, log: &mut SolutionsLog)
         }
         if !found {
             eprintln!("Failed to find solution for task {}", sol.task_id);
-            continue;
+            return;
         }
         final_rows_move(&state, sol);
-        // state.show_state(&sol.state);
+        state.show_state(&sol.state, &sol.target_state);
         assert!(sol.is_solved());
-        eprintln!("Sol len: {}", sol.answer.len());
-        log.append(sol);
+        eprintln!("Sol len [task={}]: {}", sol.task_id, sol.answer.len());
+    });
+    for sol in solutions.iter() {
+        if sol.is_solved_with_wildcards() {
+            log.append(sol);
+        } else {
+            eprintln!("Failed to solve task {}?!", sol.task_id);
+        }
     }
 }
 

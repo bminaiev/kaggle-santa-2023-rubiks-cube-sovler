@@ -94,7 +94,7 @@ impl TaskSolution {
         let mut solutions = vec![];
         for task in data.puzzles.iter() {
             if task.puzzle_type.starts_with(task_type) {
-                if only_perm && task.color_names.len() == 6 {
+                if only_perm && task.get_color_type() == "A" {
                     continue;
                 }
                 solutions.push(TaskSolution::new(data, task.id))

@@ -344,7 +344,7 @@ pub fn solve_nnn(
     // let mut solutions: Vec<_> = solutions.into_iter().filter(|t| t.task_id == 282).collect();
     // solutions.reverse();
     eprintln!("Tasks cnt: {}", solutions.len());
-    // solutions.truncate(1);
+    solutions.truncate(1);
     let task_id = solutions[0].task_id;
     eprintln!("Solving id={task_id}");
 

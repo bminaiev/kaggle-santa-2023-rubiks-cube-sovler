@@ -157,6 +157,7 @@ fn try_solve_edges(
 
     for (lvl, possible_moves) in possible_moves.iter().enumerate() {
         eprintln!("Lvl: {lvl}. Cnt moves: {}", possible_moves.len());
+        let mut parity_changes = 0;
         loop {
             let mut edges_score = calc_edges_score(&edges, &state, &sol.target_state);
             loop {
@@ -254,9 +255,11 @@ fn try_solve_edges(
                 }
             }
             if !found {
-                if sol.exact_perm || lvl > possible_moves.len() / 2 {
+                if sol.exact_perm || parity_changes >= 1 {
+                    eprintln!("Failed to find sol for lvl {lvl}");
                     return None;
                 }
+                parity_changes += 1;
                 eprintln!("FAILED TO FIND SOLUTION FOR LVL: {lvl}... Let's try to change parity..");
                 let nums = get_columns(sz, lvl);
                 // TODO: try both?
