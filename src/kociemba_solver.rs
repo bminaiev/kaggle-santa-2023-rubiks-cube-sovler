@@ -3,13 +3,17 @@ use std::process::Command;
 use crate::moves::rev_move;
 
 pub fn kociemba_solve(state: &str) -> Option<Vec<String>> {
-    let output = Command::new("kociemba")
+    // let output = Command::new("kociemba")
+    //     .arg(state)
+    //     .output()
+    //     .expect("failed to execute process");
+    let output = Command::new("/home/borys/santa-2023/rob-twophase/twophase")
         .arg(state)
         .output()
         .expect("failed to execute process");
     let output = String::from_utf8(output.stdout).unwrap();
     eprintln!("kociemba output: {}", output);
-    if output.starts_with("ERROR") {
+    if output.starts_with("ERROR") || output.starts_with("Cubie-error") {
         return None;
     }
     let moves = output.split_ascii_whitespace().collect::<Vec<_>>();
@@ -59,6 +63,7 @@ fn test() {
     let state = "BFRRUFRRUFLUDRULUBDDLBFFBDDLLFBDRULRRBFRLDBUDFUULBFDBL";
     let solution = kociemba_solve(state);
     eprintln!("solution={:?}", solution);
+    eprintln!("len: {}", solution.unwrap().len());
 }
 
 // Expected fail..

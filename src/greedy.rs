@@ -140,6 +140,10 @@ pub fn greedy_cube_optimizer(sol: &mut TaskSolution) {
     sol.show();
     let n = sol.state.len();
     let sz = calc_cube_side_size(n);
+    if sz == 3 {
+        eprintln!("No greedy for sz = 3");
+        return;
+    }
     let squares = build_squares(sz);
     let centers = calc_cube_centers(&squares);
     let target_state = sol.target_state.clone();

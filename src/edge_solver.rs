@@ -140,6 +140,10 @@ fn try_solve_edges(
     let n = sol.task.info.n;
     let sz = calc_cube_side_size(n);
 
+    if sz == 3 {
+        return Some(vec![]);
+    }
+
     let squares = build_squares(sz);
     let edges = calc_cube_edges(&squares);
 

@@ -341,10 +341,13 @@ pub fn solve_nnn(
     println!("Solving nnn: {task_type}");
 
     let mut solutions = TaskSolution::all_by_type(data, task_type, exact_perm);
-    // let mut solutions: Vec<_> = solutions.into_iter().filter(|t| t.task_id == 282).collect();
+    let mut solutions: Vec<_> = solutions
+        .into_iter()
+        .filter(|t| t.task.get_color_type() == "A")
+        .collect();
     // solutions.reverse();
     eprintln!("Tasks cnt: {}", solutions.len());
-    solutions.truncate(1);
+    // solutions.truncate(1);
     let task_id = solutions[0].task_id;
     eprintln!("Solving id={task_id}");
 

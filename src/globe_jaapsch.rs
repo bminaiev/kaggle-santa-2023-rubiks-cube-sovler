@@ -497,7 +497,7 @@ fn find_best(rng: &mut StdRng, init_colors: &[usize], row_by_color: &[usize]) ->
 
     let mut best = (prev_score, sol_info.clone());
     // // TODO: change
-    const MAX_SEC: f64 = 600.0;
+    const MAX_SEC: f64 = 1.0 * 1800.0;
     let temp_start = 10.0f64;
     let temp_end = 0.2f64;
     let start = Instant::now();
@@ -653,7 +653,7 @@ pub fn solve_globe_jaapsch(data: &Data, task_types: &[&str], log: &mut Solutions
     // solutions.truncate(1);
 
     solutions.par_iter_mut().for_each(|sol| {
-        let mut rng = StdRng::seed_from_u64(78534334);
+        let mut rng = StdRng::seed_from_u64(785834334);
         eprintln!(
             "Solving task {}. Type: {}, {}",
             sol.task_id,
