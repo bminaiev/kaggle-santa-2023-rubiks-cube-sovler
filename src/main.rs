@@ -33,6 +33,7 @@ pub mod cube_edges_calculator;
 pub mod data;
 pub mod dsu;
 pub mod edge_solver;
+pub mod edge_solver_dwalton;
 pub mod globe_jaapsch;
 pub mod greedy;
 pub mod groups;
@@ -494,19 +495,25 @@ fn main() {
     let data = load_data();
 
     let mut log = SolutionsLog::new();
-    make_submission(&data, &log);
+    // make_submission(&data, &log);
 
     // analyze_puzzle_type(&data, "cube_3/3/3");
     // analyze_permuations(&data);
 
     // show_info(&data);
 
-    // let exact_perm = false;
-    // let cube3_converter = Cube3Converter::new(Solver3::new(&data, exact_perm));
+    let exact_perm = false;
+    let cube3_converter = Cube3Converter::new(Solver3::new(&data, exact_perm));
 
     // fix_permutations_in_log(&data, "cube_33/33/33", &mut log, &cube3_converter);
 
-    // solve_nnn(&data, "cube_3/3/3", &cube3_converter, exact_perm, &mut log);
+    solve_nnn(
+        &data,
+        "cube_33/33/33",
+        &cube3_converter,
+        exact_perm,
+        &mut log,
+    );
 
     // solve3(&data, "cube_3/3/3");
 

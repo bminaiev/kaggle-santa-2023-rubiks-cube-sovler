@@ -1,13 +1,17 @@
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
+    ops::{Range, RangeInclusive},
 };
 
 use rand::Rng;
 
 use crate::{
-    cube_edges_calculator::build_squares, moves::SeveralMoves, permutation::Permutation,
+    cube_edges_calculator::build_squares,
+    moves::{rev_move, SeveralMoves},
+    permutation::Permutation,
     puzzle::Puzzle,
+    sol_utils::TaskSolution,
 };
 
 pub fn get_blocks(n: usize, moves: &[Permutation]) -> Vec<Vec<usize>> {
@@ -179,4 +183,100 @@ pub fn slice_hash<T: Hash>(a: &[T]) -> u64 {
     let mut hasher = DefaultHasher::new();
     a.hash(&mut hasher);
     hasher.finish()
+}
+
+pub fn conv_cube_to_dwalton(sol: &TaskSolution) -> String {
+    let conv = |c: char| match c {
+        'A' => 'U',
+        'B' => 'F',
+        'C' => 'R',
+        'D' => 'B',
+        'E' => 'L',
+        'F' => 'D',
+        _ => unreachable!(),
+    };
+    let sz = calc_cube_side_size(sol.state.len());
+    let mut res = String::new();
+    for &perm in [0, 2, 1, 5, 4, 3].iter() {
+        for &color_id in sol.state[perm * sz * sz..(perm + 1) * sz * sz].iter() {
+            let c = conv(sol.task.color_names[color_id].chars().next().unwrap());
+            res.push(c);
+        }
+    }
+    res
+}
+
+#[derive(Clone, Debug)]
+pub enum DwaltonMove {
+    Simple(String),
+    Wide(String, RangeInclusive<usize>),
+}
+
+pub fn conv_dwalton_moves(sz: usize, moves: &str) -> Vec<DwaltonMove> {
+    let mut res = vec![];
+    let replacements = [
+        ("F", "f"),
+        ("B", "-f"),
+        ("R", "r"),
+        ("L", "-r"),
+        ("D", "d"),
+        ("U", "-d"),
+    ];
+    for mv in moves.split_ascii_whitespace() {
+        let mut found = false;
+        for (k, v) in replacements.iter() {
+            if let Some((prev, next)) = mv.split_once(k) {
+                found = true;
+                let mut pos = if prev.is_empty() {
+                    0
+                } else {
+                    prev.parse::<usize>().unwrap() - 1
+                };
+
+                let wide = next.contains('w');
+                if sz >= 5 && wide && prev.is_empty() {
+                    pos = 1;
+                }
+                let rev = next.contains('\'');
+                let mul2 = next.ends_with('2');
+                let rpos = if v.starts_with('-') {
+                    sz - 1 - pos
+                } else {
+                    pos
+                };
+                // eprintln!("!!! mv={mv} prev={prev} next={next} pos={pos} rpos={rpos} wide={wide} rev={rev} mult2={mul2} sz={sz}");
+                if wide {
+                    let range = if v.starts_with('-') {
+                        rpos..=sz - 1
+                    } else {
+                        0..=rpos
+                    };
+                    let v = if rev { rev_move(v) } else { v.to_string() };
+                    for _ in 0..(if mul2 { 2 } else { 1 }) {
+                        res.push(DwaltonMove::Wide(v.clone(), range.clone()));
+                    }
+                } else {
+                    let mv = format!("{v}{rpos}");
+                    let mv = if rev { rev_move(&mv) } else { mv };
+                    for _ in 0..(if mul2 { 2 } else { 1 }) {
+                        res.push(DwaltonMove::Simple(mv.clone()));
+                    }
+                }
+            }
+        }
+        assert!(found);
+    }
+    res
+}
+
+#[test]
+fn dwalton_moves() {
+    let res = conv_dwalton_moves(9, "4Dw' F' R 4Fw2 4Dw2 4Fw' 4Bw 4Uw2 B 4Dw' 4Bw' 3Dw' 3Bw 4Uw2 L2 4Fw2 4Rw' 4Bw2 R2 D' 4Rw 3Uw 3Bw 4Lw2 3Lw2 3Fw' D 3Rw B 3Bw' 3Uw2 3Fw 3Uw' 4Uw2 2Bw 4Rw' 4Bw2 2Uw 4Lw2 4Rw 2Dw' 4Lw2 2Bw' 4Lw' 2Dw2 3Rw2 2Uw' R2 3Uw2 2Dw 3Rw 3Bw2 2Dw2 2Fw2 2Rw' 3Fw2 D2 2Rw2 F' D 2Fw2 2Uw2 2Bw 2Rw' 2Fw R 2Dw' 4Uw2 B 4Bw2 4Rw U' 4Dw2 F' 4Rw D 4Lw' 4Dw2 F' 4Lw2 U' 4Bw2 D 4Rw2 B' 3Rw2 F 4Lw2 3Rw' D' 3Lw' U' B' 3Rw U F 3Uw2 3Lw' 4Dw2 4Rw2 4Bw2 2Lw 4Dw2 F 4Uw2 4Bw2 2Lw' 4Bw2 D 4Bw2 3Fw2 2Bw2 D' 3Rw2 B' 2Lw 3Uw2 2Rw' B 2Rw 3Fw2 B' 2Lw' 2Rw2 U F 2Bw2 D2 2Rw 2Dw2 2Lw' 4Dw2 R 4Dw2 4Fw2 3Bw2 4Dw2 4Bw2 R' 3Bw2 4Dw2 4Bw2 4Lw2 U 3Lw2 U' 4Fw2 3Bw2 4Lw2 4Bw2 3Lw2 U 4Fw2 B2 4Uw2 4Lw2 4Uw2 3Rw2 F' 4Lw2 B 3Rw2 4Uw2 F' B2 3Rw2 4Fw2 R' 4Fw2 4Uw2 2Dw2 4Rw2 4Uw2 2Bw2 R' 2Dw2 U' 4Bw2 2Lw2 4Bw2 U 2Bw2 4Lw2 U' B 4Dw2 2Lw2 F2 4Uw2 2Dw2 F' R2 4Uw2 F 2Rw2 4Dw2 F' 4Dw2 2Dw2 3Dw2 R 3Uw2 3Dw2 R' 2Uw2 3Uw2 3Rw2 3Uw2 L' 2Rw2 2Bw2 3Rw2 3Bw2 2Rw2 U2 3Lw2 U' 3Rw2 3Bw2 U' B2 2Uw2 3Rw2 B 3Uw2 2Rw2 3Rw2 F2 3Lw2 3Dw2 F 2Rw2 2Dw2 3Dw2 B L U' 4Dw2 F' 4Dw2 R' U' D' B D2 B' 4Uw2 4Rw2 D2 4Dw2 4Lw2 D2 F2 B 4Dw2 4Rw2 U' F2 U 4Bw2 U' B2 D 4Rw2 4Fw2 4Bw2 4Rw2 B2 L2 4Lw2 4Bw2 L 3Rw2 F 3Rw2 U' 3Rw2 D L' B' 3Uw2 3Dw2 L2 B2 3Lw2 R2 B 3Uw2 3Lw2 F2 L2 U2 F 3Dw2 3Fw2 D F2 L2 D R2 3Bw2 L2 3Lw2 3Fw2 U 3Fw2 3Bw2 U2 3Bw2 2Uw2 R 2Fw2 R B' U' 2Uw2 L' L2 D 2Fw2 D2 2Lw2 D2 B' 2Dw2 R2 2Uw2 2Rw2 B 2Lw2 R2 B D' 2Bw2 2Rw2 F2 B2 U' F2 U2 2Fw2 D 2Rw2 B2 2Rw2 2Bw2 D 2Bw2 F' U' F' R' U2 F2 R' B2 U R U' L2 F2 U' R2 U F2 R2 L2");
+    eprintln!("res={:?}", res);
+}
+
+#[test]
+fn dwalton_moves4() {
+    let res = conv_dwalton_moves(4, "Rw' B2 Rw2 U2 Rw' Dw2 R F2 Lw' L2 U Rw2 Uw2 D2 B Dw2 B2 L2 D' Lw2 U2 L2 D' L2 Lw2 D R2 Fw2 D' F L' B2 D' L2 F' U F R B2 R2 B2 U R2 F2 B2 U R2 B2");
+    eprintln!("res={:?}", res);
 }

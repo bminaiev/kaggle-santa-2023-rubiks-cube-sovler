@@ -7,6 +7,7 @@ use crate::{
     data::Data,
     dsu::Dsu,
     edge_solver::solve_edges,
+    edge_solver_dwalton::solve_edges_dwalton,
     greedy::greedy_cube_optimizer,
     moves::SeveralMoves,
     parallel_triangle_solver::solve_all_triangles,
@@ -17,7 +18,10 @@ use crate::{
     to_cube3_converter::Cube3Converter,
     triangle_solver::Triangle,
     triangles_parity::triangle_parity_solver,
-    utils::{calc_cube_side_size, get_cube_side_moves, show_cube_ids},
+    utils::{
+        calc_cube_side_size, conv_cube_to_dwalton, conv_dwalton_moves, get_cube_side_moves,
+        show_cube_ids,
+    },
 };
 
 struct Subspace {
@@ -440,6 +444,8 @@ pub fn solve_nnn(
             eprintln!("Skipping 283. Exact_perm: {}", sol.exact_perm);
             continue;
         }
+        eprintln!("DWALTON: {}", conv_cube_to_dwalton(sol));
+
         // eprintln!("State: {:?}", sol.state);
         if exact_perm {
             let need_moves = triangle_parity_solver(&sol.state, dsu.get_groups(), sol, sz);
@@ -456,9 +462,35 @@ pub fn solve_nnn(
 
         eprintln!("Before solving edges...");
 
+        eprintln!("DWALTON: {}", conv_cube_to_dwalton(sol));
+
+        // let tmp_moves = conv_dwalton_moves(9, "4Rw U2 4Rw U2 4Rw U2 4Rw U2 4Rw U2 4Uw2 R U D F 4Rw2 B L'  4Bw2 D  4Dw2 4Rw2 D2 B 4Rw2 4Dw2 F' U2 D2 4Rw2 4Uw2 B' 4Uw2 F B2 4Lw2 D B2 U 4Fw2 4Lw2 F2 4Bw2 D' R2 U' 4Fw2 L2 U 4Lw2 4Fw2 ");
+        // for mv in tmp_moves.iter() {
+        //     sol.append_move(mv);
+        // }
+        // sol.print(data);
+
+        // eprintln!("DWALTON2: {}", conv_cube_to_dwalton(sol));
+
+        // let tmp_moves = conv_dwalton_moves(9, "3Rw U2 3Rw U2 3Rw U2 3Rw U2 3Rw U2 D B 3Rw2 B D 3Lw2 F' R' B2 D R2 3Dw2 F' D2 B' 3Uw2 3Lw2 F' 3Rw2 F' R2 3Uw2 3Dw2 R2 D' 3Lw2 D' L2 3Rw2 U' 3Fw2 B2 3Rw2 3Bw2 L2 D 3Bw2");
+        // for mv in tmp_moves.iter() {
+        //     sol.append_move(mv);
+        // }
+        // sol.print(data);
+
+        // eprintln!("DWALTON3: {}", conv_cube_to_dwalton(sol));
+
+        // let tmp_moves = conv_dwalton_moves(9, "B' L' 2Rw2 D R' F' D F' 2Lw2 2Dw2 B' D2 F2 2Uw2 2Lw2 U2 2Uw2 F 2Dw2 D2 R2 U 2Rw2 D R2 2Bw2 D' 2Fw2 D2 R2 U 2Bw2 U 2Lw2 R2 2Bw2 ");
+        // for mv in tmp_moves.iter() {
+        //     sol.append_move(mv);
+        // }
+        // sol.print(data);
+
+        // eprintln!("DWALTON4: {}", conv_cube_to_dwalton(sol));
+
         show_ids(&sol.get_correct_colors_positions());
 
-        solve_edges(sol);
+        solve_edges_dwalton(sol);
 
         sol.print(data);
         show_ids(&sol.get_correct_colors_positions());
