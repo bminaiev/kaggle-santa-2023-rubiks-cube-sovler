@@ -13,7 +13,9 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct Triangle {
     pub mv: SeveralMoves,
-    pub info: Vec<String>,
+    mv1: String,
+    mv2: String,
+    side_mv: String,
 }
 
 impl Triangle {
@@ -23,14 +25,14 @@ impl Triangle {
     }
 
     pub fn key(&self) -> String {
-        format!("{}_{}", self.info[0], self.info[2])
+        format!("{}_{}", self.mv1, self.side_mv)
     }
 
     pub fn can_combine(&self, other: &Self) -> bool {
-        if self.info[0] != other.info[0]
-            || self.info[2] != other.info[2]
-            || self.info[1] == other.info[1]
-            || self.info[1] == rev_move(&other.info[1])
+        if self.mv1 != other.mv1
+            || self.side_mv != other.side_mv
+            || self.mv2 == other.mv2
+            || self.mv2 == rev_move(&other.mv2)
         {
             return false;
         }
@@ -57,17 +59,17 @@ impl Triangle {
     }
 
     pub fn gen_combination_moves(triangles: &[&Triangle]) -> Vec<String> {
-        let mv1 = triangles[0].info[0].clone();
-        let side_mv = triangles[0].info[2].clone();
+        let mv1 = triangles[0].mv1.clone();
+        let side_mv = triangles[0].side_mv.clone();
         let mut res = vec![mv1.clone(), side_mv.clone()];
         for tr in triangles.iter() {
-            res.push(tr.info[1].clone());
+            res.push(tr.mv2.clone());
         }
         res.push(rev_move(&side_mv));
         res.push(rev_move(&mv1));
         res.push(side_mv.clone());
         for tr in triangles.iter().rev() {
-            res.push(rev_move(&tr.info[1]));
+            res.push(rev_move(&tr.mv2));
         }
         res.push(rev_move(&side_mv));
         res
@@ -95,7 +97,9 @@ impl Triangle {
                     name: check.iter().map(|&x| x.to_string()).collect(),
                     permutation: perm,
                 },
-                info: vec![mv1.to_string(), mv2.to_string(), side_mv.to_string()],
+                mv1: mv1.to_string(),
+                mv2: mv2.to_string(),
+                side_mv: side_mv.to_string(),
             })
         } else {
             None
@@ -161,7 +165,9 @@ impl TriangleGroupSolver {
                             cycles: vec![new_cycle],
                         },
                     },
-                    info: tr.info.clone(),
+                    mv1: tr.mv1.clone(),
+                    mv2: tr.mv2.clone(),
+                    side_mv: tr.side_mv.clone(),
                 }
             })
             .collect();
