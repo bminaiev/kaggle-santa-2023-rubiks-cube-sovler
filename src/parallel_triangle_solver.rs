@@ -2,7 +2,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::{
     sol_utils::TaskSolution,
-    triangle_solver::{Triangle, TriangleGroupSolver},
+    triangle_solver::{Solver, Triangle, TriangleGroupSolver},
 };
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -34,6 +34,8 @@ pub fn solve_all_triangles(groups: &[Vec<Triangle>], sol: &mut TaskSolution, exa
         .collect();
 
     eprintln!("Total keys: {}", triangles_by_key.len());
+    let lens: Vec<usize> = solvers.iter().map(|s| s.cur_answer_len).collect();
+    eprintln!("Lens: {:?}", lens);
     let cur_sum_answer_lens = solvers.iter().map(|s| s.cur_answer_len).sum::<usize>();
     eprintln!("Cur sum answer lens: {}", cur_sum_answer_lens);
 
@@ -112,7 +114,8 @@ pub fn solve_all_triangles(groups: &[Vec<Triangle>], sol: &mut TaskSolution, exa
                             tr.mv.permutation.apply(&mut new_state);
                             let new_dist_estimate = solver.get_dist_estimate(&new_state);
                             if new_dist_estimate < cur_dist_estimate {
-                                let real_ans_len = solver.solve(&new_state).len();
+                                let real_ans_len =
+                                    solver.solve(&new_state, Solver::default()).len();
                                 if real_ans_len < solver.cur_answer_len {
                                     let dist = solver.cur_answer_len - real_ans_len;
                                     if dist > best_dist.0 {
@@ -151,7 +154,7 @@ pub fn solve_all_triangles(groups: &[Vec<Triangle>], sol: &mut TaskSolution, exa
                         sol.answer.push(mv.clone());
                     }
                     for &gr in groups_changed.iter() {
-                        let new_ans = solvers[gr].solve(&sol.state).len();
+                        let new_ans = solvers[gr].solve(&sol.state, Solver::default()).len();
                         assert!(new_ans < solvers[gr].cur_answer_len);
                         solvers[gr].cur_answer_len = new_ans;
                     }
@@ -174,7 +177,7 @@ pub fn solve_all_triangles(groups: &[Vec<Triangle>], sol: &mut TaskSolution, exa
     eprintln!("FALLBACK TO REGULAR SOLVER...");
 
     for (solver, group) in solvers.iter().zip(groups.iter()) {
-        let moves = solver.solve(&sol.state);
+        let moves = solver.solve(&sol.state, Solver::default());
         for tr_id in moves.into_iter() {
             for mv in group[tr_id].mv.name.iter() {
                 puzzle_info.moves[&mv.to_string()].apply(&mut sol.state);

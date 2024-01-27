@@ -11,6 +11,7 @@ use rand::{seq::SliceRandom, Rng};
 use crate::{
     cube_ab::cube_ab_solver,
     data::{load_data, Data},
+    dwalton_experiment::solve_dwalton,
     globe_jaapsch::solve_globe_jaapsch,
     moves::SeveralMoves,
     permutation::Permutation,
@@ -23,6 +24,7 @@ use crate::{
     solver_nnn::{fix_permutations_in_log, solve_nnn},
     submission_combiner::make_submission,
     to_cube3_converter::Cube3Converter,
+    twsearch_experiment::solve_twsearch,
     utils::{get_all_perms, get_blocks},
     wreath_solver::solve_wreath,
 };
@@ -32,6 +34,7 @@ pub mod cube_ab;
 pub mod cube_edges_calculator;
 pub mod data;
 pub mod dsu;
+pub mod dwalton_experiment;
 pub mod edge_solver;
 pub mod edge_solver_dwalton;
 pub mod globe_jaapsch;
@@ -54,6 +57,7 @@ pub mod submission_combiner;
 pub mod to_cube3_converter;
 pub mod triangle_solver;
 pub mod triangles_parity;
+pub mod twsearch_experiment;
 pub mod utils;
 pub mod wreath_solver;
 
@@ -507,13 +511,7 @@ fn main() {
 
     // fix_permutations_in_log(&data, "cube_33/33/33", &mut log, &cube3_converter);
 
-    solve_nnn(
-        &data,
-        "cube_33/33/33",
-        &cube3_converter,
-        exact_perm,
-        &mut log,
-    );
+    solve_nnn(&data, "cube_9/9/9", &cube3_converter, exact_perm, &mut log);
 
     // solve3(&data, "cube_3/3/3");
 

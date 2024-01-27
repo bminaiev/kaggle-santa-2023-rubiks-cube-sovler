@@ -212,6 +212,31 @@ pub enum DwaltonMove {
     Wide(String, RangeInclusive<usize>),
 }
 
+fn get_move_index(mv: &str) -> usize {
+    let mut res = 0;
+    for c in mv.chars() {
+        if c.is_ascii_digit() {
+            res = res * 10 + c.to_digit(10).unwrap() as usize;
+        }
+    }
+    res
+}
+
+impl DwaltonMove {
+    pub fn get_index(&self) -> usize {
+        match self {
+            DwaltonMove::Simple(mv) => get_move_index(mv),
+            DwaltonMove::Wide(_mv, r) => {
+                if *r.start() == 0 {
+                    *r.end()
+                } else {
+                    *r.start()
+                }
+            }
+        }
+    }
+}
+
 pub fn conv_dwalton_moves(sz: usize, moves: &str) -> Vec<DwaltonMove> {
     let mut res = vec![];
     let replacements = [

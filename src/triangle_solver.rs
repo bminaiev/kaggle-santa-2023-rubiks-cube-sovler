@@ -1,10 +1,13 @@
-use std::collections::{BinaryHeap, HashMap};
+use std::{
+    collections::{BinaryHeap, HashMap, HashSet, VecDeque},
+    mem,
+};
 
 use crate::{
     moves::{rev_move, SeveralMoves},
     permutation::Permutation,
     puzzle_type::PuzzleType,
-    utils::perm_parity,
+    utils::{perm_parity, slice_hash},
 };
 
 #[derive(Clone, Debug)]
@@ -108,6 +111,17 @@ pub struct TriangleGroupSolver {
     pub cur_answer_len: usize,
 }
 
+pub enum Solver {
+    Astar,
+    Bfs(usize),
+}
+
+impl Default for Solver {
+    fn default() -> Self {
+        Solver::Bfs(5)
+    }
+}
+
 impl TriangleGroupSolver {
     pub fn new(triangles: &[Triangle], start_colors: &[usize], target_colors: &[usize]) -> Self {
         let mut positions = vec![];
@@ -154,6 +168,8 @@ impl TriangleGroupSolver {
 
         res.triangles = triangles;
 
+        eprintln!("Triangles len: {}", res.triangles.len());
+
         for i in 0..res.positions.len() {
             let target_color = res.conv_color(target_colors[res.positions[i]]);
             res.d[i][target_color] = 0;
@@ -178,7 +194,40 @@ impl TriangleGroupSolver {
             }
         }
 
-        res.cur_answer_len = res.solve(start_colors).len();
+        res.cur_answer_len = res.solve(start_colors, Solver::default()).len();
+        // {
+        //     eprintln!(
+        //         "Checking first moves. Cur answer len: {}",
+        //         res.cur_answer_len
+        //     );
+        //     let start_estimate = res.get_dist_estimate(start_colors);
+        //     eprintln!("Start estimate: {}", start_estimate);
+        //     let start_state = res.conv_state(start_colors);
+        //     for tr in res.triangles.iter() {
+        //         let mut new_state = start_state.clone();
+        //         tr.mv.permutation.apply(&mut new_state);
+        //         let estimate = res.score(&new_state);
+        //         if estimate >= start_estimate {
+        //             continue;
+        //         }
+        //         let new_len = res.bfs(&new_state, 5).len();
+        //         if new_len < res.cur_answer_len {
+        //             eprintln!(
+        //                 "Good first move! {} -> {}. Est: {estimate}",
+        //                 res.cur_answer_len, new_len
+        //             );
+        //         }
+        //     }
+        // }
+        // let bfs10 = res.solve(start_colors, Solver::Bfs(10)).len();
+        // let bfs50 = res.solve(start_colors, Solver::Bfs(50)).len();
+        // let bfs100 = res.solve(start_colors, Solver::Bfs(100)).len();
+        // let bfs1000 = res.solve(start_colors, Solver::Bfs(1000)).len();
+        // let estimate = res.get_dist_estimate(start_colors);
+        // eprintln!(
+        //     "BFS10: {}, BFS50: {}, BFS100: {}. A*: {}. BFS1000: {}. Esimate: {estimate}",
+        //     bfs10, bfs50, bfs100, res.cur_answer_len, bfs1000
+        // );
 
         res
     }
@@ -207,13 +256,16 @@ impl TriangleGroupSolver {
             .collect()
     }
 
-    pub fn solve(&self, state: &[usize]) -> Vec<usize> {
+    pub fn solve(&self, state: &[usize], solver: Solver) -> Vec<usize> {
         let perm = self.conv_state(state);
         // assert!(perm_parity(&perm) == 0);
-        self.a_star(&perm)
+        match solver {
+            Solver::Astar => self.a_star_old(&perm),
+            Solver::Bfs(width) => self.bfs(&perm, width),
+        }
     }
 
-    fn a_star(&self, start: &[usize]) -> Vec<usize> {
+    fn a_star_old(&self, start: &[usize]) -> Vec<usize> {
         let mut queue = BinaryHeap::new();
         queue.push(State::new(start.to_vec(), 0, self.score(start)));
         let mut seen = HashMap::new();
@@ -252,6 +304,57 @@ impl TriangleGroupSolver {
                     },
                 );
                 queue.push(State::new(new_perm, state.spent_moves + 1, new_score));
+            }
+        }
+        unreachable!();
+    }
+
+    fn bfs(&self, start: &[usize], width: usize) -> Vec<usize> {
+        let mut queues = vec![vec![]; 50];
+        queues[0].push(State::new(start.to_vec(), 0, self.score(start)));
+        let mut seen = HashMap::new();
+        seen.insert(
+            start.to_vec(),
+            Prev {
+                perm: start.to_vec(),
+                edge_id: usize::MAX,
+            },
+        );
+        // const MAX_SEE: usize = 5;
+        for it in 0..queues.len() {
+            let mut queue = vec![];
+            mem::swap(&mut queue, &mut queues[it]);
+            queue.sort_by_key(|x| x.score);
+            queue.truncate(width);
+            for state in queue.into_iter() {
+                if state.score == 0 {
+                    // eprintln!("Found solution: {:?}", state.spent_moves);
+                    let mut res = vec![];
+                    let mut cur = state.perm.clone();
+                    while cur != start {
+                        let prev = seen[&cur].clone();
+                        res.push(prev.edge_id);
+                        cur = prev.perm;
+                    }
+                    res.reverse();
+                    return res;
+                }
+                for (tr_id, tr) in self.triangles.iter().enumerate() {
+                    let mut new_perm = state.perm.clone();
+                    tr.mv.permutation.apply(&mut new_perm);
+                    let new_score = self.score(&new_perm);
+                    if seen.contains_key(&new_perm) {
+                        continue;
+                    }
+                    seen.insert(
+                        new_perm.clone(),
+                        Prev {
+                            perm: state.perm.clone(),
+                            edge_id: tr_id,
+                        },
+                    );
+                    queues[it + 1].push(State::new(new_perm, state.spent_moves + 1, new_score));
+                }
             }
         }
         unreachable!();

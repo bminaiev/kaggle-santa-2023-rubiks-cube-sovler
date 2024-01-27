@@ -351,7 +351,7 @@ pub fn solve_nnn(
         .collect();
     // solutions.reverse();
     eprintln!("Tasks cnt: {}", solutions.len());
-    // solutions.truncate(1);
+    solutions.truncate(1);
     let task_id = solutions[0].task_id;
     eprintln!("Solving id={task_id}");
 
@@ -444,7 +444,7 @@ pub fn solve_nnn(
             eprintln!("Skipping 283. Exact_perm: {}", sol.exact_perm);
             continue;
         }
-        eprintln!("DWALTON: {}", conv_cube_to_dwalton(sol));
+        // eprintln!("DWALTON: {}", conv_cube_to_dwalton(sol));
 
         // eprintln!("State: {:?}", sol.state);
         if exact_perm {
@@ -462,7 +462,7 @@ pub fn solve_nnn(
 
         eprintln!("Before solving edges...");
 
-        eprintln!("DWALTON: {}", conv_cube_to_dwalton(sol));
+        // eprintln!("DWALTON: {}", conv_cube_to_dwalton(sol));
 
         // let tmp_moves = conv_dwalton_moves(9, "4Rw U2 4Rw U2 4Rw U2 4Rw U2 4Rw U2 4Uw2 R U D F 4Rw2 B L'  4Bw2 D  4Dw2 4Rw2 D2 B 4Rw2 4Dw2 F' U2 D2 4Rw2 4Uw2 B' 4Uw2 F B2 4Lw2 D B2 U 4Fw2 4Lw2 F2 4Bw2 D' R2 U' 4Fw2 L2 U 4Lw2 4Fw2 ");
         // for mv in tmp_moves.iter() {
@@ -499,6 +499,6 @@ pub fn solve_nnn(
         sol.print(data);
         show_ids(&sol.get_correct_colors_positions());
 
-        log.append(sol);
+        // log.append(sol);
     }
 }
