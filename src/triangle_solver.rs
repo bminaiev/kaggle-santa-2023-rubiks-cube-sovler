@@ -20,7 +20,7 @@ pub struct Triangle {
 
 fn mv_key(mv: &str) -> String {
     if mv.starts_with('-') {
-        mv[..2].to_string()
+        mv[1..2].to_string()
     } else {
         mv[..1].to_string()
     }
@@ -39,38 +39,7 @@ impl Triangle {
             mv_key(&self.mv1),
             mv_key(&self.mv2)
         )
-    }
-
-    // fn can_combine_slow(&self, other: &Self) -> bool {
-    //     let expected_perm = self.mv.permutation.combine(&other.mv.permutation);
-
-    //     let mut state: Vec<_> = (0..puzzle_info.n).collect();
-    //     let moves = Self::gen_combination_moves(&[self, other]);
-    //     for mv in moves.iter() {
-    //         puzzle_info.moves[mv].apply(&mut state);
-    //     }
-    //     expected_perm.apply_rev(&mut state);
-    //     for (i, val) in state.iter().enumerate() {
-    //         if *val != i {
-    //             eprintln!("Bad triangles!: {:?} and {:?}", self.info, other.info);
-    //             assert!(false);
-    //             return false;
-    //         }
-    //     }
-
-    //     // eprintln!("Can join triangles!: {:?} and {:?}", self.info, other.info);
-    // }
-
-    pub fn can_combine(&self, other: &Self) -> bool {
-        if self.mv2 != other.mv2
-            || self.side_mv != other.side_mv
-            || self.mv1 == other.mv1
-            || self.mv1 == rev_move(&other.mv1)
-        {
-            return false;
-        }
-
-        true
+        // self.side_mv.to_string()
     }
 
     pub fn gen_combination_moves(
@@ -86,7 +55,7 @@ impl Triangle {
         for mv2 in moves2.iter() {
             res.push(mv2.clone());
         }
-        res.push(rev_move(&side_mv));
+        res.push(rev_move(side_mv));
         for mv1 in moves1.iter() {
             res.push(rev_move(mv1));
         }
@@ -94,7 +63,7 @@ impl Triangle {
         for mv2 in moves2.iter() {
             res.push(rev_move(mv2));
         }
-        res.push(rev_move(&side_mv));
+        res.push(rev_move(side_mv));
         res
     }
 
@@ -145,7 +114,7 @@ pub enum Solver {
 
 impl Default for Solver {
     fn default() -> Self {
-        Solver::Bfs(5)
+        Solver::Bfs(20)
     }
 }
 

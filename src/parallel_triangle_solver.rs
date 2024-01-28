@@ -3,7 +3,7 @@ use std::collections::{BTreeSet, HashMap};
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
-    moves::rev_move,
+    moves::{self, rev_move},
     permutation::Permutation,
     sol_utils::TaskSolution,
     triangle_solver::{Solver, Triangle, TriangleGroupSolver},
@@ -38,12 +38,29 @@ struct SameKeyTriangles {
     key: String,
     side_mv: String,
     bad: Vec<Vec<bool>>,
+    bad1: Vec<Vec<bool>>,
+    triangles: Vec<Vec<Option<Triangle>>>,
 }
 
 impl SameKeyTriangles {
     fn choose_best_move(&self) -> EstimateChange {
         let mut best = (0, 0, 0);
         for mask1 in 1u64..(1 << self.moves1.len()) {
+            let mut ok = true;
+            for i in 0..self.moves1.len() {
+                if mask1 & (1 << i) != 0 {
+                    for j in 0..self.moves1.len() {
+                        if mask1 & (1 << j) != 0 && self.bad1[i][j] {
+                            ok = false;
+                            break;
+                        }
+                    }
+                }
+            }
+            if !ok {
+                continue;
+            }
+
             let mut sum = 0;
             let mut mask2 = 0;
             let mut seen_solvers = BTreeSet::new();
@@ -137,6 +154,131 @@ impl SameKeyTriangles {
         }
         panic!("Triangle not found!");
     }
+
+    pub fn new(
+        key: &str,
+        triangles: &[Triangle],
+        solver_id_by_triangle: &HashMap<Triangle, usize>,
+        solvers: &[TriangleGroupSolver],
+        sol: &TaskSolution,
+    ) -> Self {
+        let side_mv = triangles[0].side_mv.clone();
+        let mut moves1 = Vec::new();
+        let mut moves2 = Vec::new();
+        for tr in triangles.iter() {
+            moves1.push(tr.mv1.clone());
+            moves2.push(tr.mv2.clone());
+        }
+        moves1.sort();
+        moves1.dedup();
+        moves2.sort();
+        moves2.dedup();
+        assert!(moves1.len() <= 64);
+        assert!(moves2.len() <= 64);
+        let mut solver_ids = vec![vec![usize::MAX; moves2.len()]; moves1.len()];
+        let mut deltas = vec![vec![i32::MAX; moves2.len()]; moves1.len()];
+        let mut bad = vec![vec![false; moves2.len()]; moves1.len()];
+        let mut bad1 = vec![vec![false; moves1.len()]; moves1.len()];
+        for i in 0..moves1.len() {
+            for j in 0..moves1.len() {
+                if i != j && moves1[i] == rev_move(&moves1[j]) {
+                    bad1[i][j] = true;
+                }
+            }
+        }
+        let mut triangles2 = vec![vec![None; moves2.len()]; moves1.len()];
+        for (i, mv1) in moves1.iter().enumerate() {
+            for (j, mv2) in moves2.iter().enumerate() {
+                if mv1 == mv2 || mv1 == &rev_move(mv2) {
+                    bad[i][j] = true;
+                }
+                for tr in triangles.iter() {
+                    if tr.mv1 == *mv1 && tr.mv2 == *mv2 {
+                        triangles2[i][j] = Some(tr.clone());
+                        let solver_id = solver_id_by_triangle[tr];
+                        solver_ids[i][j] = solver_id;
+                        let solver = &solvers[solver_id];
+                        let cur_ans_len = solver.cur_answer_len as i32;
+                        let cur_estimate = solver.get_dist_estimate(&sol.state);
+                        let mut nstate = sol.state.clone();
+                        tr.mv.permutation.apply(&mut nstate);
+                        let new_estimate = solver.get_dist_estimate(&nstate);
+                        if new_estimate > cur_estimate {
+                            deltas[i][j] = 1;
+                        } else {
+                            let new_ans_len = solver.solve(&nstate, Solver::default()).len() as i32;
+                            let delta = new_ans_len - cur_ans_len;
+                            deltas[i][j] = delta;
+                        }
+                    }
+                }
+                if deltas[i][j] == i32::MAX {
+                    bad[i][j] = true;
+                }
+            }
+        }
+        Self {
+            moves1,
+            moves2,
+            solver_ids,
+            deltas,
+            key: key.to_string(),
+            side_mv,
+            bad,
+            bad1,
+            triangles: triangles2,
+        }
+    }
+
+    pub fn ensure_correct_change(&self, change: &EstimateChange, sol: &TaskSolution) {
+        let moves = self.build_moves(change);
+        let mut real_perm = Permutation::identity();
+        for mv in moves.iter() {
+            real_perm = real_perm.combine(&sol.task.info.moves[mv]);
+        }
+        let mut expected_perm = Permutation::identity();
+        for i in 0..self.moves1.len() {
+            if change.mask1 & (1 << i) != 0 {
+                for j in 0..self.moves2.len() {
+                    if change.mask2 & (1 << j) != 0 {
+                        expected_perm = expected_perm
+                            .combine(&self.triangles[i][j].as_ref().unwrap().mv.permutation);
+                    }
+                }
+            }
+        }
+        if real_perm != expected_perm {
+            eprintln!("Real perm: {:?}", real_perm);
+            eprintln!("Expected perm: {:?}", expected_perm);
+            let mut use_moves1 = vec![];
+            let mut use_moves2 = vec![];
+            for i in 0..self.moves1.len() {
+                if change.mask1 & (1 << i) != 0 {
+                    use_moves1.push(self.moves1[i].clone());
+                }
+            }
+            for i in 0..self.moves2.len() {
+                if change.mask2 & (1 << i) != 0 {
+                    use_moves2.push(self.moves2[i].clone());
+                }
+            }
+            eprintln!("Use moves1: {:?}", use_moves1);
+            eprintln!("Use moves2: {:?}", use_moves2);
+            eprintln!("Bad pairs:");
+            for i in 0..self.bad1.len() {
+                for j in 0..self.bad1[i].len() {
+                    if self.bad1[i][j] {
+                        eprint!("X ");
+                    } else {
+                        eprint!(". ");
+                    }
+                }
+                eprintln!()
+            }
+            panic!("Wrong permutation!");
+        }
+        assert_eq!(real_perm, expected_perm);
+    }
 }
 
 pub fn solve_all_triangles(groups: &[Vec<Triangle>], sol: &mut TaskSolution, exact_perm: bool) {
@@ -170,52 +312,8 @@ pub fn solve_all_triangles(groups: &[Vec<Triangle>], sol: &mut TaskSolution, exa
     let mut triangles_by_key: HashMap<String, SameKeyTriangles> = triangles_by_key
         .into_par_iter()
         .map(|(key, triangles)| {
-            let side_mv = triangles[0].side_mv.clone();
-            let mut moves1 = Vec::new();
-            let mut moves2 = Vec::new();
-            for tr in triangles.iter() {
-                moves1.push(tr.mv1.clone());
-                moves2.push(tr.mv2.clone());
-            }
-            moves1.sort();
-            moves1.dedup();
-            moves2.sort();
-            moves2.dedup();
-            let mut solver_ids = vec![vec![usize::MAX; moves2.len()]; moves1.len()];
-            let mut deltas = vec![vec![i32::MAX; moves2.len()]; moves1.len()];
-            let mut bad = vec![vec![false; moves2.len()]; moves1.len()];
-            for (i, mv1) in moves1.iter().enumerate() {
-                for (j, mv2) in moves2.iter().enumerate() {
-                    if mv1 == mv2 || mv1 == &rev_move(mv2) {
-                        bad[i][j] = true;
-                    }
-                    for tr in triangles.iter() {
-                        if tr.mv1 == *mv1 && tr.mv2 == *mv2 {
-                            let solver_id = solver_id_by_triangle[tr];
-                            let solver = &solvers[solver_id];
-                            let cur_ans_len = solver.cur_answer_len as i32;
-                            let mut nstate = sol.state.clone();
-                            tr.mv.permutation.apply(&mut nstate);
-                            let new_ans_len = solver.solve(&nstate, Solver::default()).len() as i32;
-                            let delta = new_ans_len - cur_ans_len;
-                            solver_ids[i][j] = solver_id;
-                            deltas[i][j] = delta;
-                        }
-                    }
-                    if deltas[i][j] == i32::MAX {
-                        bad[i][j] = true;
-                    }
-                }
-            }
-            let same_key = SameKeyTriangles {
-                moves1,
-                moves2,
-                solver_ids,
-                deltas,
-                key: key.clone(),
-                side_mv,
-                bad,
-            };
+            let same_key =
+                SameKeyTriangles::new(&key, &triangles, &solver_id_by_triangle, &solvers, sol);
             (key, same_key)
         })
         .collect();
@@ -242,6 +340,7 @@ pub fn solve_all_triangles(groups: &[Vec<Triangle>], sol: &mut TaskSolution, exa
             change.mask2.count_ones()
         );
         let same_key = triangles_by_key.get(&change.key).unwrap();
+        same_key.ensure_correct_change(&change, sol);
 
         let all_moves = same_key.build_moves(&change);
 
@@ -265,6 +364,11 @@ pub fn solve_all_triangles(groups: &[Vec<Triangle>], sol: &mut TaskSolution, exa
                 let mut nstate = sol.state.clone();
                 tr.mv.permutation.apply(&mut nstate);
                 let solver = &solvers[solver_id_by_triangle[tr]];
+                let prev_estimate = solver.get_dist_estimate(&sol.state);
+                let new_estimate = solver.get_dist_estimate(&nstate);
+                if new_estimate > prev_estimate {
+                    return (tr, 1);
+                }
                 let new_ans_len = solver.solve(&nstate, Solver::default()).len();
                 let delta = new_ans_len as i32 - solver.cur_answer_len as i32;
                 (tr, delta)
