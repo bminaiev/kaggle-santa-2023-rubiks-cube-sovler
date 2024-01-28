@@ -1,13 +1,9 @@
-use std::{
-    collections::{BinaryHeap, HashMap, HashSet, VecDeque},
-    mem,
-};
+use std::{collections::HashMap, mem};
 
 use crate::{
     moves::{rev_move, SeveralMoves},
     permutation::Permutation,
     puzzle_type::PuzzleType,
-    utils::{perm_parity, slice_hash},
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -132,7 +128,7 @@ impl TriangleGroupSolver {
         colors.sort();
         colors.dedup();
 
-        let mut d = vec![vec![usize::MAX / 10; colors.len()]; positions.len()];
+        let d = vec![vec![usize::MAX / 10; colors.len()]; positions.len()];
 
         let mut res = Self {
             positions,
@@ -203,83 +199,86 @@ impl TriangleGroupSolver {
         self.positions.binary_search(&x).unwrap()
     }
 
-    pub fn score(&self, perm: &[usize]) -> usize {
+    fn score(&self, perm: ColorsState) -> usize {
         let mut res = 0;
         for i in 0..self.positions.len() {
-            let value = perm[i];
+            let value = perm.get(i);
             res += self.d[i][value];
         }
         res
     }
 
-    fn conv_state(&self, state: &[usize]) -> Vec<usize> {
-        self.positions
-            .iter()
-            .map(|&x| self.conv_color(state[x]))
-            .collect()
+    fn conv_state(&self, state: &[usize]) -> ColorsState {
+        let mut res = ColorsState::default();
+        for i in 0..self.positions.len() {
+            let color = self.conv_color(state[self.positions[i]]);
+            res.set(i, color);
+        }
+        res
     }
 
     pub fn solve(&self, state: &[usize], solver: Solver) -> Vec<usize> {
         let perm = self.conv_state(state);
         // assert!(perm_parity(&perm) == 0);
         match solver {
-            Solver::Astar => self.a_star_old(&perm),
-            Solver::Bfs(width) => self.bfs(&perm, width),
+            Solver::Astar => unimplemented!(),
+            Solver::Bfs(width) => self.bfs(perm, width),
         }
     }
 
-    fn a_star_old(&self, start: &[usize]) -> Vec<usize> {
-        let mut queue = BinaryHeap::new();
-        queue.push(State::new(start.to_vec(), 0, self.score(start)));
-        let mut seen = HashMap::new();
-        seen.insert(
-            start.to_vec(),
-            Prev {
-                perm: start.to_vec(),
-                edge_id: usize::MAX,
-            },
-        );
-        while let Some(state) = queue.pop() {
-            if state.score == 0 {
-                // eprintln!("Found solution: {:?}", state.spent_moves);
-                let mut res = vec![];
-                let mut cur = state.perm.clone();
-                while cur != start {
-                    let prev = seen[&cur].clone();
-                    res.push(prev.edge_id);
-                    cur = prev.perm;
-                }
-                res.reverse();
-                return res;
-            }
-            for (tr_id, tr) in self.triangles.iter().enumerate() {
-                let mut new_perm = state.perm.clone();
-                tr.mv.permutation.apply(&mut new_perm);
-                let new_score = self.score(&new_perm);
-                if seen.contains_key(&new_perm) {
-                    continue;
-                }
-                seen.insert(
-                    new_perm.clone(),
-                    Prev {
-                        perm: state.perm.clone(),
-                        edge_id: tr_id,
-                    },
-                );
-                queue.push(State::new(new_perm, state.spent_moves + 1, new_score));
-            }
-        }
-        unreachable!();
-    }
+    // fn a_star_old(&self, start: &[usize]) -> Vec<usize> {
+    //     let start = ColorsState::from_array(start);
+    //     let mut queue = BinaryHeap::new();
+    //     queue.push(State::new(start, 0, self.score(start)));
+    //     let mut seen = HashMap::new();
+    //     seen.insert(
+    //         start.to_vec(),
+    //         Prev {
+    //             perm: ColorsState::from_array(start),
+    //             edge_id: usize::MAX,
+    //         },
+    //     );
+    //     while let Some(state) = queue.pop() {
+    //         if state.score == 0 {
+    //             // eprintln!("Found solution: {:?}", state.spent_moves);
+    //             let mut res = vec![];
+    //             let mut cur = state.perm.clone();
+    //             while cur != start {
+    //                 let prev = seen[&cur].clone();
+    //                 res.push(prev.edge_id);
+    //                 cur = prev.perm;
+    //             }
+    //             res.reverse();
+    //             return res;
+    //         }
+    //         for (tr_id, tr) in self.triangles.iter().enumerate() {
+    //             let mut new_perm = state.perm.clone();
+    //             tr.mv.permutation.apply(&mut new_perm);
+    //             let new_score = self.score(&new_perm);
+    //             if seen.contains_key(&new_perm) {
+    //                 continue;
+    //             }
+    //             seen.insert(
+    //                 new_perm.clone(),
+    //                 Prev {
+    //                     perm: state.perm.clone(),
+    //                     edge_id: tr_id,
+    //                 },
+    //             );
+    //             queue.push(State::new(new_perm, state.spent_moves + 1, new_score));
+    //         }
+    //     }
+    //     unreachable!();
+    // }
 
-    fn bfs(&self, start: &[usize], width: usize) -> Vec<usize> {
+    fn bfs(&self, start: ColorsState, width: usize) -> Vec<usize> {
         let mut queues = vec![vec![]; 50];
-        queues[0].push(State::new(start.to_vec(), 0, self.score(start)));
+        queues[0].push(State::new(start, 0, self.score(start)));
         let mut seen = HashMap::new();
         seen.insert(
-            start.to_vec(),
+            start,
             Prev {
-                perm: start.to_vec(),
+                perm: start,
                 edge_id: usize::MAX,
             },
         );
@@ -293,7 +292,7 @@ impl TriangleGroupSolver {
                 if state.score == 0 {
                     // eprintln!("Found solution: {:?}", state.spent_moves);
                     let mut res = vec![];
-                    let mut cur = state.perm.clone();
+                    let mut cur = state.perm;
                     while cur != start {
                         let prev = seen[&cur].clone();
                         res.push(prev.edge_id);
@@ -303,16 +302,16 @@ impl TriangleGroupSolver {
                     return res;
                 }
                 for (tr_id, tr) in self.triangles.iter().enumerate() {
-                    let mut new_perm = state.perm.clone();
-                    tr.mv.permutation.apply(&mut new_perm);
-                    let new_score = self.score(&new_perm);
+                    let mut new_perm = state.perm;
+                    new_perm.apply_perm(&tr.mv.permutation);
+                    let new_score = self.score(new_perm);
                     if seen.contains_key(&new_perm) {
                         continue;
                     }
                     seen.insert(
-                        new_perm.clone(),
+                        new_perm,
                         Prev {
-                            perm: state.perm.clone(),
+                            perm: state.perm,
                             edge_id: tr_id,
                         },
                     );
@@ -325,31 +324,74 @@ impl TriangleGroupSolver {
 
     pub(crate) fn get_dist_estimate(&self, state: &[usize]) -> usize {
         let perm = self.conv_state(state);
-        self.score(&perm)
+        self.score(perm)
     }
 }
 
 #[derive(Clone)]
 struct Prev {
-    perm: Vec<usize>,
+    perm: ColorsState,
     edge_id: usize,
 }
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct State {
     priority: usize,
-    perm: Vec<usize>,
+    perm: ColorsState,
     spent_moves: usize,
     score: usize,
 }
 
 impl State {
-    pub fn new(perm: Vec<usize>, spent_moves: usize, score: usize) -> Self {
+    pub fn new(perm: ColorsState, spent_moves: usize, score: usize) -> Self {
         Self {
             priority: usize::MAX - (spent_moves + score),
             perm,
             spent_moves,
             score,
         }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
+struct ColorsState {
+    mask: u128,
+}
+
+const BITS_PER_COLOR: usize = 5;
+
+impl ColorsState {
+    fn get(&self, pos: usize) -> usize {
+        ((self.mask >> (pos * BITS_PER_COLOR)) & ((1 << BITS_PER_COLOR) - 1)) as usize
+    }
+
+    fn set(&mut self, pos: usize, color: usize) {
+        assert!(color < (1 << BITS_PER_COLOR));
+        self.mask &= !(((1 << BITS_PER_COLOR) - 1) << (pos * BITS_PER_COLOR));
+        self.mask |= (color as u128) << (pos * BITS_PER_COLOR);
+    }
+
+    fn swap(&mut self, p1: usize, p2: usize) {
+        let c1 = self.get(p1);
+        let c2 = self.get(p2);
+        self.set(p1, c2);
+        self.set(p2, c1);
+    }
+
+    fn apply_perm(&mut self, perm: &Permutation) {
+        assert_eq!(perm.cycles.len(), 1);
+        for cycle in perm.cycles.iter() {
+            for w in cycle.windows(2) {
+                self.swap(w[0], w[1]);
+            }
+        }
+    }
+
+    fn conv(&self) -> Vec<usize> {
+        let mut res = vec![];
+        for i in 0..24 {
+            res.push(self.get(i));
+        }
+        res
     }
 }

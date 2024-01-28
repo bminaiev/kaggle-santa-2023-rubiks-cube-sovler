@@ -3,7 +3,7 @@ use std::collections::{BTreeSet, HashMap};
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
-    moves::{self, rev_move},
+    moves::rev_move,
     permutation::Permutation,
     sol_utils::TaskSolution,
     triangle_solver::{Solver, Triangle, TriangleGroupSolver},
@@ -96,7 +96,7 @@ impl SameKeyTriangles {
             return best;
         }
 
-        let mut ok = true;
+        let mut ok = mask1.count_ones() < 4;
         for i in 0..bit {
             if mask1 & (1 << i) != 0 && self.bad1[i][bit] {
                 ok = false;
