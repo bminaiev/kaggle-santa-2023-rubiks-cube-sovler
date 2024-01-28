@@ -15,17 +15,16 @@ use crate::{
     },
 };
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DwaltonLine {
     pub moves: Vec<DwaltonMove>,
     pub comment: String,
     pub changed_indexes: BTreeSet<usize>,
 }
 
-pub fn run_dwalton_solver(sol: &TaskSolution) -> Option<Vec<DwaltonLine>> {
-    let sz = calc_cube_side_size(sol.task.info.n);
+pub fn run_dwalton_solver_state(state: String) -> Option<Vec<DwaltonLine>> {
+    let sz = calc_cube_side_size(state.len());
 
-    let state = conv_cube_to_dwalton(sol);
     eprintln!("State: {state}");
     let output = Command::new("./rubiks-cube-solver.py")
         .args(["--state", &state])
@@ -64,6 +63,11 @@ pub fn run_dwalton_solver(sol: &TaskSolution) -> Option<Vec<DwaltonLine>> {
         }
     }
     Some(res)
+}
+
+pub fn run_dwalton_solver(sol: &TaskSolution) -> Option<Vec<DwaltonLine>> {
+    let state = conv_cube_to_dwalton(sol);
+    run_dwalton_solver_state(state)
 }
 
 pub fn solve_dwalton(

@@ -5,7 +5,7 @@ use rand::{rngs::StdRng, seq::IteratorRandom, Rng};
 use crate::{
     data::Data,
     puzzle::Puzzle,
-    utils::{calc_cube_side_size, get_start_permutation, show_cube_ids},
+    utils::{calc_cube_side_size, show_cube_ids},
 };
 
 #[derive(Clone)]

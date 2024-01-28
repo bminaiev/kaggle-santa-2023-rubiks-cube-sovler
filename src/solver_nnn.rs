@@ -315,7 +315,7 @@ pub fn fix_permutations_in_log(
         match stage {
             SolutionStage::Empty => unreachable!(),
             SolutionStage::CentersDone => {
-                solve_edges(&mut task, true);
+                solve_edges(&mut task);
                 show_cube_ids(&task.get_correct_colors_positions(), sz);
                 eprintln!("EDGES SOLVED.. SAVE PROGRESS!");
                 log.append(&task);
@@ -348,7 +348,7 @@ pub fn solve_nnn(
     let mut solutions = TaskSolution::all_by_type(data, task_type, exact_perm);
     let mut solutions: Vec<_> = solutions
         .into_iter()
-        .filter(|t| t.task.get_color_type() == "A")
+        .filter(|t| t.task.get_color_type() == "B")
         .collect();
     // solutions.reverse();
     eprintln!("Tasks cnt: {}", solutions.len());
@@ -450,6 +450,7 @@ pub fn solve_nnn(
 
         // eprintln!("State: {:?}", sol.state);
         if exact_perm {
+            eprintln!("Solving parity...");
             let need_moves = triangle_parity_solver(&sol.state, dsu.get_groups(), sol, sz);
             for mv in need_moves.iter() {
                 // eprintln!("Need move: {:?}", mv.name);
@@ -466,7 +467,9 @@ pub fn solve_nnn(
                 sol_tmp.make_random_moves(&mut rng);
                 let with_moves = sol_tmp.clone();
                 solve_all_triangles_greedy(&triangle_groups, &mut sol_tmp, exact_perm);
-                if !solve_edges_dwalton(&mut sol_tmp) {
+                eprintln!("After solving triangles greedily...");
+                show_ids(&sol_tmp.get_correct_colors_positions());
+                if !solve_edges(&mut sol_tmp) {
                     eprintln!("FAILED TO SOLVE EDGES... Need to change something?");
                 } else if cube3_converter.solve(data, &mut sol_tmp, exact_perm) {
                     eprintln!("FOUND GOOD RANDOM MOVES!");
@@ -510,7 +513,7 @@ pub fn solve_nnn(
 
         show_ids(&sol.get_correct_colors_positions());
 
-        solve_edges_dwalton(sol);
+        solve_edges(sol);
 
         sol.print(data);
         show_ids(&sol.get_correct_colors_positions());

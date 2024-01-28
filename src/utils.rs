@@ -186,6 +186,10 @@ pub fn slice_hash<T: Hash>(a: &[T]) -> u64 {
 }
 
 pub fn conv_cube_to_dwalton(sol: &TaskSolution) -> String {
+    conv_colors_to_dwalton(&sol.state)
+}
+
+pub fn conv_colors_to_dwalton(colors: &[usize]) -> String {
     let conv = |c: char| match c {
         'A' => 'U',
         'B' => 'F',
@@ -195,11 +199,12 @@ pub fn conv_cube_to_dwalton(sol: &TaskSolution) -> String {
         'F' => 'D',
         _ => unreachable!(),
     };
-    let sz = calc_cube_side_size(sol.state.len());
+    let sz = calc_cube_side_size(colors.len());
     let mut res = String::new();
+    let color_names = ['A', 'B', 'C', 'D', 'E', 'F'];
     for &perm in [0, 2, 1, 5, 4, 3].iter() {
-        for &color_id in sol.state[perm * sz * sz..(perm + 1) * sz * sz].iter() {
-            let c = conv(sol.task.color_names[color_id].chars().next().unwrap());
+        for &color_id in colors[perm * sz * sz..(perm + 1) * sz * sz].iter() {
+            let c = conv(color_names[color_id]);
             res.push(c);
         }
     }

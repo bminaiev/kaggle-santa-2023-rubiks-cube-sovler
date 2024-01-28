@@ -11,6 +11,7 @@ use crate::{
     cube_edges_calculator::{
         build_squares, calc_cube_centers, calc_cube_edges, calc_edges_score, viz_edges_score,
     },
+    edge_solver_dwalton::solve_edges_dwalton,
     moves::{rev_move, SeveralMoves},
     permutation::Permutation,
     sol_utils::TaskSolution,
@@ -101,7 +102,7 @@ fn possible_to_make_centers_right(sol: &TaskSolution, state: &[usize]) -> Option
 
     let cnt_ok_centers = |a: &[usize]| {
         (0..cube_centers.len())
-            .filter(|&i| cube_centers[i] && a[i] == i)
+            .filter(|&i| cube_centers[i] && a[i] == sol.target_state[i])
             .count()
     };
 
@@ -152,10 +153,12 @@ fn try_solve_edges(
     let mut answer = vec![];
     let puzzle_info = &sol.task.info;
     let mut state = sol.state.clone();
-    for _ in 0..rng.gen_range(0..5) {
-        let mv = side_moves.choose(rng).unwrap().clone();
-        puzzle_info.moves[&mv].apply(&mut state);
-        answer.push(mv);
+    if allow_retries {
+        for _ in 0..rng.gen_range(0..5) {
+            let mv = side_moves.choose(rng).unwrap().clone();
+            puzzle_info.moves[&mv].apply(&mut state);
+            answer.push(mv);
+        }
     }
     assert!(possible_to_make_centers_right(sol, &state).is_some());
     let puzzle_info = &sol.task.info;
@@ -192,6 +195,9 @@ fn try_solve_edges(
                 eprintln!("FOUND SOLUTION FOR LVL: {lvl}");
                 break;
             }
+            // if !allow_retries {
+            //     return None;
+            // }
             let mut seen = HashMap::new();
             let mut cur_state = state.clone();
             seen.insert(cur_state.clone(), "".to_string());
@@ -207,15 +213,15 @@ fn try_solve_edges(
                 for mv in side_moves.iter() {
                     let mut new_state = cur_state.clone();
                     puzzle_info.moves[mv].apply(&mut new_state);
-                    let new_edges_score = calc_edges_score(&edges, &new_state, &sol.target_state);
-                    if new_edges_score != edges_score {
-                        eprintln!("Applied move: {mv}");
-                        eprintln!("Prev edges score: {edges_score:?}");
-                        show_cube_ids(&viz_edges_score(&edges, &cur_state, &sol.target_state), sz);
-                        eprintln!("New edges score: {new_edges_score:?}");
-                        show_cube_ids(&viz_edges_score(&edges, &new_state, &sol.target_state), sz);
-                        unreachable!();
-                    }
+                    // let new_edges_score = calc_edges_score(&edges, &new_state, &sol.target_state);
+                    // if new_edges_score != edges_score {
+                    //     eprintln!("Applied move: {mv}");
+                    //     eprintln!("Prev edges score: {edges_score:?}");
+                    //     show_cube_ids(&viz_edges_score(&edges, &cur_state, &sol.target_state), sz);
+                    //     eprintln!("New edges score: {new_edges_score:?}");
+                    //     show_cube_ids(&viz_edges_score(&edges, &new_state, &sol.target_state), sz);
+                    //     unreachable!();
+                    // }
                     if seen.contains_key(&new_state) {
                         continue;
                     }
@@ -288,7 +294,10 @@ fn try_solve_edges(
     Some(answer)
 }
 
-pub fn solve_edges(sol: &mut TaskSolution, allow_retries: bool) -> bool {
+pub fn solve_edges(sol: &mut TaskSolution) -> bool {
+    if !sol.exact_perm {
+        return solve_edges_dwalton(sol);
+    }
     let possible_moves = get_possible_moves(sol);
     if sol.exact_perm {
         assert!(possible_to_make_centers_right(sol, &sol.state).is_some());
@@ -296,6 +305,7 @@ pub fn solve_edges(sol: &mut TaskSolution, allow_retries: bool) -> bool {
 
     let mut rng = StdRng::seed_from_u64(34534543);
 
+    let allow_retries = false;
     for glob_iter in 0..if allow_retries { 100 } else { 1 } {
         eprintln!("START ITER: {glob_iter}");
 
@@ -309,6 +319,7 @@ pub fn solve_edges(sol: &mut TaskSolution, allow_retries: bool) -> bool {
                 sol.append_move(mv);
             }
             eprintln!("EDGES SOLVED!");
+            sol.show();
             return true;
         }
     }

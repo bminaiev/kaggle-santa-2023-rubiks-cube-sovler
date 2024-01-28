@@ -18,6 +18,7 @@ impl Cube3Converter {
     }
 
     pub fn solve(&self, data: &Data, task: &mut TaskSolution, exact_perm: bool) -> bool {
+        // task.print(data);
         let n = task.task.info.n;
         let sz = calc_cube_side_size(n);
         let squares = build_squares(sz);
