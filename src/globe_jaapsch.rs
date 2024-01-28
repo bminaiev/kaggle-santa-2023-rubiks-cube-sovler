@@ -15,13 +15,13 @@ use crate::{
     utils::calc_num_invs,
 };
 
-struct State {
-    n_rows: usize,
-    n_cols: usize,
-    puzzle_type: PuzzleType,
+pub struct GlobeState {
+    pub n_rows: usize,
+    pub n_cols: usize,
+    pub puzzle_type: PuzzleType,
 }
 
-impl State {
+impl GlobeState {
     pub fn new(puzzle_type: &PuzzleType) -> Self {
         let mut n_rows = 0;
         let mut n_cols = 0;
@@ -49,7 +49,7 @@ impl State {
         (i / self.n_cols, i % self.n_cols)
     }
 
-    fn show_state(&self, a: &[usize], target_state: &[usize]) {
+    pub fn show_state(&self, a: &[usize], target_state: &[usize]) {
         eprintln!("--------");
         for r in 0..self.n_rows {
             for c in 0..self.n_cols {
@@ -99,7 +99,7 @@ impl State {
         }
     }
 
-    fn move_row_right(&self, sol: &mut TaskSolution, row: usize, dist: usize) {
+    pub fn move_row_right(&self, sol: &mut TaskSolution, row: usize, dist: usize) {
         assert!(dist <= self.n_cols);
         if dist < self.n_cols - dist {
             let mv = format!("-r{row}");
@@ -114,7 +114,7 @@ impl State {
         }
     }
 
-    fn move_row_left(&self, sol: &mut TaskSolution, row: usize, dist: usize) {
+    pub fn move_row_left(&self, sol: &mut TaskSolution, row: usize, dist: usize) {
         self.move_row_right(sol, row, self.n_cols - dist);
     }
 
@@ -129,10 +129,15 @@ impl State {
         }
     }
 
-    fn move_rotate(&self, sol: &mut TaskSolution, col: usize) {
+    pub fn move_rotate(&self, sol: &mut TaskSolution, col: usize) {
         let col = col % self.n_cols;
         let mv = format!("f{col}");
         sol.append_move(&mv);
+    }
+
+    pub(crate) fn calc_col(&self, offset: i32) -> i32 {
+        let sz = self.n_cols as i32;
+        ((offset % sz) + sz) % sz
     }
 }
 
@@ -163,7 +168,7 @@ impl Split {
     };
 }
 
-fn get_best_splits(state: &State, a: &[usize], allow_bad_parity: bool) -> Vec<Split> {
+fn get_best_splits(state: &GlobeState, a: &[usize], allow_bad_parity: bool) -> Vec<Split> {
     let mut by_row = vec![[Split::INF; 2]; state.n_rows];
     for row in 0..state.n_rows {
         for split in 0..state.n_cols {
@@ -206,7 +211,7 @@ fn get_best_splits(state: &State, a: &[usize], allow_bad_parity: bool) -> Vec<Sp
     res
 }
 
-fn make_correct_perm(state: &State, sol: &mut TaskSolution) -> bool {
+fn make_correct_perm(state: &GlobeState, sol: &mut TaskSolution) -> bool {
     // state.ensure_correct_rows(sol);
     let best_splits = get_best_splits(state, &sol.state, !sol.exact_perm);
     if sol.exact_perm {
@@ -304,7 +309,7 @@ fn make_correct_perm(state: &State, sol: &mut TaskSolution) -> bool {
     true
 }
 
-fn final_rows_move(state: &State, sol: &mut TaskSolution) {
+pub fn globe_final_rows_move(state: &GlobeState, sol: &mut TaskSolution) {
     eprintln!("Last moves!");
     for row in 0..state.n_rows {
         let mut best = (usize::MAX, usize::MAX);
@@ -335,7 +340,7 @@ fn pick_random_perm(n: usize, rng: &mut StdRng) -> Vec<usize> {
     a
 }
 
-fn solve_two_rows(state: &State, sol: &mut TaskSolution, r1: usize, rng: &mut StdRng) {
+fn solve_two_rows(state: &GlobeState, sol: &mut TaskSolution, r1: usize, rng: &mut StdRng) {
     let r2 = state.n_rows - r1 - 1;
     eprintln!("Start state: (r1 = {r1}, r2 = {r2})");
 
@@ -662,7 +667,7 @@ pub fn solve_globe_jaapsch(data: &Data, task_types: &[&str], log: &mut Solutions
         );
 
         let puzzle_type = &data.puzzle_info[&sol.task.puzzle_type];
-        let mut state = State::new(puzzle_type);
+        let mut state = GlobeState::new(puzzle_type);
 
         let mut found = false;
         for it in 0..500 {
@@ -692,7 +697,7 @@ pub fn solve_globe_jaapsch(data: &Data, task_types: &[&str], log: &mut Solutions
             eprintln!("Failed to find solution for task {}", sol.task_id);
             return;
         }
-        final_rows_move(&state, sol);
+        globe_final_rows_move(&state, sol);
         state.show_state(&sol.state, &sol.target_state);
         assert!(sol.is_solved());
         eprintln!("Sol len [task={}]: {}", sol.task_id, sol.answer.len());
@@ -706,7 +711,7 @@ pub fn solve_globe_jaapsch(data: &Data, task_types: &[&str], log: &mut Solutions
     }
 }
 
-fn make_random_moves(state: &State, sol: &mut TaskSolution, rng: &mut StdRng) {
+fn make_random_moves(state: &GlobeState, sol: &mut TaskSolution, rng: &mut StdRng) {
     for _ in 0..rng.gen_range(0..5) {
         let mv = state.puzzle_type.moves.keys().choose(rng).unwrap();
         sol.append_move(mv);

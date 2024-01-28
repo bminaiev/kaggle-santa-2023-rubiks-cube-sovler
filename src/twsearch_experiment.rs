@@ -53,7 +53,7 @@ pub fn solve_twsearch(
             continue;
         }
 
-        let solution = data.solutions.my_280k[&sol.task_id].clone();
+        let solution = data.solutions.my_138k[&sol.task_id].clone();
 
         let mut moves_conv = BTreeMap::new();
         for pos in 0..sz {

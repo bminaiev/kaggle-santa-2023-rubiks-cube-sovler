@@ -15,6 +15,7 @@ use crate::{
     exact_perm33_solver::solve_exact33_perm,
     exact_perm_solver::solve_exact_perm,
     globe_jaapsch::solve_globe_jaapsch,
+    globe_optimizer::globe_optimize,
     moves::SeveralMoves,
     permutation::Permutation,
     puzzle::Puzzle,
@@ -42,6 +43,7 @@ pub mod edge_solver_dwalton;
 pub mod exact_perm33_solver;
 pub mod exact_perm_solver;
 pub mod globe_jaapsch;
+pub mod globe_optimizer;
 pub mod greedy;
 pub mod groups;
 pub mod kociemba_solver;
@@ -476,13 +478,13 @@ fn analyze_permuations(data: &Data) {
 }
 
 fn show_globe(data: &Data) {
-    let n = 6;
-    let m = 10;
+    let n = 3;
+    let m = 4;
     let task_type = format!("globe_{n}/{m}");
     let puzzle_info = &data.puzzle_info[&task_type.to_string()];
-    // for (k, v) in puzzle_info.moves.iter() {
-    //     println!("{}: {:?}", k, v.cycles);
-    // }
+    for (k, v) in puzzle_info.moves.iter() {
+        println!("{}: {:?}", k, v.cycles);
+    }
     for task in data.puzzles.iter() {
         if task.puzzle_type == task_type {
             for r in 0..(n + 1) {
@@ -503,7 +505,7 @@ fn main() {
     let data = load_data();
 
     let mut log = SolutionsLog::new();
-    // make_submission(&data, &log);
+    make_submission(&data, &log);
 
     // analyze_puzzle_type(&data, "cube_3/3/3");
     // analyze_permuations(&data);
@@ -516,18 +518,18 @@ fn main() {
     // fix_permutations_in_log(&data, "cube_33/33/33", &mut log, &cube3_converter);
 
     // solve_exact33_perm(&data, "cube_33/33/33", &cube3_converter, &mut log);
-    solve_nnn(
-        &data,
-        "cube_19/19/19",
-        &cube3_converter,
-        exact_perm,
-        &mut log,
-    );
+    // solve_nnn(
+    //     &data,
+    //     "cube_33/33/33",
+    //     &cube3_converter,
+    //     exact_perm,
+    //     &mut log,
+    // );
 
     // solve3(&data, "cube_3/3/3");
 
     // show_globe(&data);
-    // solve_globe_jaapsch(&data, &["globe_1/8"], &mut log);
+    // globe_optimize(&data, &["globe_8/25"], &mut log);
 
     // solve_wreath(&data, &mut log);
 

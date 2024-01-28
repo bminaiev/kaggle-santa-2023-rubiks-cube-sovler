@@ -352,8 +352,8 @@ pub fn solve_nnn(
     //     .collect();
     // solutions.reverse();
     eprintln!("Tasks cnt: {}", solutions.len());
-    solutions.swap(0, 3);
-    // solutions.truncate(1);
+    // solutions.swap(0, 3);
+    solutions.truncate(1);
     let task_id = solutions[0].task_id;
     eprintln!("Solving id={task_id}");
 
