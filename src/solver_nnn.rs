@@ -1,5 +1,6 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
+use rand::{rngs::StdRng, SeedableRng};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
@@ -10,7 +11,7 @@ use crate::{
     edge_solver_dwalton::solve_edges_dwalton,
     greedy::greedy_cube_optimizer,
     moves::SeveralMoves,
-    parallel_triangle_solver::solve_all_triangles,
+    parallel_triangle_solver::{solve_all_triangles, solve_all_triangles_greedy},
     permutation::Permutation,
     puzzle_type::PuzzleType,
     sol_utils::TaskSolution,
@@ -314,7 +315,7 @@ pub fn fix_permutations_in_log(
         match stage {
             SolutionStage::Empty => unreachable!(),
             SolutionStage::CentersDone => {
-                solve_edges(&mut task);
+                solve_edges(&mut task, true);
                 show_cube_ids(&task.get_correct_colors_positions(), sz);
                 eprintln!("EDGES SOLVED.. SAVE PROGRESS!");
                 log.append(&task);
@@ -351,7 +352,7 @@ pub fn solve_nnn(
         .collect();
     // solutions.reverse();
     eprintln!("Tasks cnt: {}", solutions.len());
-    solutions.swap(0, 1);
+    // solutions.swap(0, 1);
     solutions.truncate(1);
     let task_id = solutions[0].task_id;
     eprintln!("Solving id={task_id}");
@@ -376,7 +377,7 @@ pub fn solve_nnn(
 
     let keys = puzzle_info.moves.keys().collect::<Vec<_>>();
 
-    let mut rng = rand::thread_rng();
+    let mut rng = StdRng::seed_from_u64(345345);
 
     let mv_side = |mv: &str| -> String {
         if mv.starts_with('-') {
@@ -455,8 +456,26 @@ pub fn solve_nnn(
                 puzzle_info.moves[mv].apply(&mut sol.state);
                 sol.answer.push(mv.to_string());
             }
-        } else {
+        } else if sz > 5 {
             greedy_cube_optimizer(sol);
+        }
+
+        if sz % 2 == 0 {
+            loop {
+                let mut sol_tmp = sol.clone();
+                sol_tmp.make_random_moves(&mut rng);
+                let with_moves = sol_tmp.clone();
+                solve_all_triangles_greedy(&triangle_groups, &mut sol_tmp, exact_perm);
+                if !solve_edges_dwalton(&mut sol_tmp) {
+                    eprintln!("FAILED TO SOLVE EDGES... Need to change something?");
+                } else if cube3_converter.solve(data, &mut sol_tmp, exact_perm) {
+                    eprintln!("FOUND GOOD RANDOM MOVES!");
+                    *sol = with_moves;
+                    break;
+                } else {
+                    eprintln!("FAILED TO SOVLE 3x3");
+                }
+            }
         }
 
         solve_all_triangles(&triangle_groups, sol, exact_perm);
@@ -496,7 +515,7 @@ pub fn solve_nnn(
         sol.print(data);
         show_ids(&sol.get_correct_colors_positions());
 
-        cube3_converter.solve(data, sol, false);
+        cube3_converter.solve(data, sol, exact_perm);
         sol.print(data);
         show_ids(&sol.get_correct_colors_positions());
 

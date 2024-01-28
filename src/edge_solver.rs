@@ -136,6 +136,7 @@ fn try_solve_edges(
     sol: &TaskSolution,
     rng: &mut StdRng,
     possible_moves: &[Vec<SeveralMoves>],
+    allow_retries: bool,
 ) -> Option<Vec<String>> {
     let n = sol.task.info.n;
     let sz = calc_cube_side_size(n);
@@ -259,7 +260,7 @@ fn try_solve_edges(
                 }
             }
             if !found {
-                if sol.exact_perm || parity_changes >= 1 {
+                if sol.exact_perm || parity_changes >= 1 || !allow_retries {
                     eprintln!("Failed to find sol for lvl {lvl}");
                     return None;
                 }
@@ -287,7 +288,7 @@ fn try_solve_edges(
     Some(answer)
 }
 
-pub fn solve_edges(sol: &mut TaskSolution) {
+pub fn solve_edges(sol: &mut TaskSolution, allow_retries: bool) -> bool {
     let possible_moves = get_possible_moves(sol);
     if sol.exact_perm {
         assert!(possible_to_make_centers_right(sol, &sol.state).is_some());
@@ -295,10 +296,10 @@ pub fn solve_edges(sol: &mut TaskSolution) {
 
     let mut rng = StdRng::seed_from_u64(34534543);
 
-    for glob_iter in 0..100 {
+    for glob_iter in 0..if allow_retries { 100 } else { 1 } {
         eprintln!("START ITER: {glob_iter}");
 
-        if let Some(moves) = try_solve_edges(sol, &mut rng, &possible_moves) {
+        if let Some(moves) = try_solve_edges(sol, &mut rng, &possible_moves, allow_retries) {
             for mv in moves.iter() {
                 sol.append_move(mv);
             }
@@ -308,9 +309,9 @@ pub fn solve_edges(sol: &mut TaskSolution) {
                 sol.append_move(mv);
             }
             eprintln!("EDGES SOLVED!");
-            return;
+            return true;
         }
     }
     eprintln!("EDGES NOT SOLVED :(");
-    unreachable!();
+    false
 }

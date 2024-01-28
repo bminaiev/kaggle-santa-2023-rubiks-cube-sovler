@@ -423,3 +423,35 @@ pub fn solve_all_triangles(groups: &[Vec<Triangle>], sol: &mut TaskSolution, exa
     );
     eprintln!("Triangles total: {triangles_total_applied}. Groups: {triangles_groups_joined}");
 }
+
+pub fn solve_all_triangles_greedy(
+    groups: &[Vec<Triangle>],
+    sol: &mut TaskSolution,
+    exact_perm: bool,
+) {
+    let mut triangles_by_key = std::collections::HashMap::<String, Vec<Triangle>>::new();
+    for triangles in groups.iter() {
+        for tr in triangles.iter() {
+            triangles_by_key
+                .entry(tr.key())
+                .or_default()
+                .push(tr.clone());
+        }
+    }
+
+    eprintln!("Create solvers for triangles.");
+    let mut solvers: Vec<_> = groups
+        .iter()
+        .map(|triangles| TriangleGroupSolver::new(triangles, &sol.state, &sol.target_state))
+        .collect();
+    eprintln!("Done.");
+
+    for (solver, group) in solvers.iter().zip(groups.iter()) {
+        let moves = solver.solve(&sol.state, Solver::default());
+        for tr_id in moves.into_iter() {
+            for mv in group[tr_id].mv.name.iter() {
+                sol.append_move(mv);
+            }
+        }
+    }
+}

@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+use rand::{rngs::StdRng, seq::IteratorRandom, Rng};
+
 use crate::{
     data::Data,
     puzzle::Puzzle,
@@ -157,5 +159,12 @@ impl TaskSolution {
             &self.get_correct_colors_positions(),
             calc_cube_side_size(self.state.len()),
         )
+    }
+
+    pub fn make_random_moves(&mut self, rng: &mut StdRng) {
+        for _ in 0..rng.gen_range(0..5) {
+            let mv = self.task.info.moves.keys().choose(rng).unwrap().clone();
+            self.append_move(&mv);
+        }
     }
 }

@@ -1,4 +1,7 @@
-use std::{collections::HashSet, process::Command};
+use std::{
+    collections::{BTreeSet, HashSet},
+    process::Command,
+};
 
 use crate::{
     cube_edges_calculator::build_squares,
@@ -13,28 +16,45 @@ use crate::{
 };
 
 #[derive(Clone)]
-struct DwaltonLine {
-    moves: Vec<DwaltonMove>,
-    comment: String,
+pub struct DwaltonLine {
+    pub moves: Vec<DwaltonMove>,
+    pub comment: String,
+    pub changed_indexes: BTreeSet<usize>,
 }
 
-fn run_dwalton_solver(sol: &TaskSolution) -> Vec<DwaltonLine> {
+pub fn run_dwalton_solver(sol: &TaskSolution) -> Option<Vec<DwaltonLine>> {
     let sz = calc_cube_side_size(sol.task.info.n);
 
     let state = conv_cube_to_dwalton(sol);
     eprintln!("State: {state}");
-    Command::new("./rubiks-cube-solver.py")
+    let output = Command::new("./rubiks-cube-solver.py")
         .args(["--state", &state])
         .current_dir("/home/borys/santa-2023/dwalton76/rubiks-cube-NxNxN-solver")
         .output()
         .expect("failed to execute process");
+
+    let output = String::from_utf8(output.stdout).unwrap();
+    if !output.lines().any(|line| line.starts_with("Solution: ")) {
+        eprintln!("No solution found..");
+        return None;
+    }
+
     let lines = std::fs::read_to_string("/tmp/rubiks-cube-NxNxN-solver/solution.txt").unwrap();
     let mut res = Vec::new();
-    let mut cur_line = vec![];
+    let mut cur_line: Vec<DwaltonMove> = vec![];
     for token in lines.split_ascii_whitespace() {
         match token.strip_prefix("COMMENT_") {
             Some(suffix) => {
+                let mut changed_indexes = BTreeSet::new();
+                changed_indexes.insert(0);
+                changed_indexes.insert(sz - 1);
+                for mv in cur_line.iter() {
+                    let idx = mv.get_index();
+                    changed_indexes.insert(idx);
+                    changed_indexes.insert(sz - 1 - idx);
+                }
                 res.push(DwaltonLine {
+                    changed_indexes,
                     moves: cur_line.clone(),
                     comment: suffix.to_string(),
                 });
@@ -43,7 +63,7 @@ fn run_dwalton_solver(sol: &TaskSolution) -> Vec<DwaltonLine> {
             None => cur_line.extend(conv_dwalton_moves(sz, token)),
         }
     }
-    res
+    Some(res)
 }
 
 pub fn solve_dwalton(
@@ -94,7 +114,7 @@ pub fn solve_dwalton(
             sol.print(data);
             show_ids(&sol.get_correct_colors_positions());
 
-            let lines = run_dwalton_solver(sol);
+            let lines = run_dwalton_solver(sol).unwrap();
             if lines.is_empty() {
                 break;
             }

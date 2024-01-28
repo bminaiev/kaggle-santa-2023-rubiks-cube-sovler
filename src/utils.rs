@@ -259,7 +259,7 @@ pub fn conv_dwalton_moves(sz: usize, moves: &str) -> Vec<DwaltonMove> {
                 };
 
                 let wide = next.contains('w');
-                if sz >= 5 && wide && prev.is_empty() {
+                if wide && prev.is_empty() {
                     pos = 1;
                 }
                 let rev = next.contains('\'');

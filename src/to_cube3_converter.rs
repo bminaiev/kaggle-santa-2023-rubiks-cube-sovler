@@ -17,7 +17,7 @@ impl Cube3Converter {
         Self { cube3_solver }
     }
 
-    pub fn solve(&self, data: &Data, task: &mut TaskSolution, exact_perm: bool) {
+    pub fn solve(&self, data: &Data, task: &mut TaskSolution, exact_perm: bool) -> bool {
         let n = task.task.info.n;
         let sz = calc_cube_side_size(n);
         let squares = build_squares(sz);
@@ -106,7 +106,7 @@ impl Cube3Converter {
                 Some(kociemba_moves) => kociemba_moves,
                 None => {
                     eprintln!("KOCIEMBA FAILED!");
-                    vec![]
+                    return false;
                 }
             }
         };
@@ -125,5 +125,6 @@ impl Cube3Converter {
         show_cube_ids(&task.get_correct_colors_positions(), sz);
 
         assert!(task.is_solved());
+        true
     }
 }

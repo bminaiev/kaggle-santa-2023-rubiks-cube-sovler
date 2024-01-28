@@ -511,13 +511,7 @@ fn main() {
 
     // fix_permutations_in_log(&data, "cube_33/33/33", &mut log, &cube3_converter);
 
-    solve_nnn(
-        &data,
-        "cube_33/33/33",
-        &cube3_converter,
-        exact_perm,
-        &mut log,
-    );
+    solve_nnn(&data, "cube_8/8/8", &cube3_converter, exact_perm, &mut log);
 
     // solve3(&data, "cube_3/3/3");
 
