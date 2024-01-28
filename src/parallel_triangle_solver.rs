@@ -9,12 +9,14 @@ use crate::{
     triangle_solver::{Solver, Triangle, TriangleGroupSolver},
 };
 
+type MaskType = u128;
+
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
 struct EstimateChange {
     delta: i32,
     key: String,
-    mask1: u64,
-    mask2: u64,
+    mask1: MaskType,
+    mask2: MaskType,
     side_mv: String,
 }
 
@@ -43,67 +45,89 @@ struct SameKeyTriangles {
 }
 
 impl SameKeyTriangles {
-    fn choose_best_move(&self) -> EstimateChange {
-        let mut best = (0, 0, 0);
-        for mask1 in 1u64..(1 << self.moves1.len()) {
+    fn choose_best_move_fixed_mask1(&self, mask1: MaskType) -> EstimateChange {
+        let mut sum = 0;
+        let mut mask2 = 0;
+        let mut seen_solvers = BTreeSet::new();
+        for j in 0..self.moves2.len() {
+            let mut cur = 0;
             let mut ok = true;
             for i in 0..self.moves1.len() {
                 if mask1 & (1 << i) != 0 {
-                    for j in 0..self.moves1.len() {
-                        if mask1 & (1 << j) != 0 && self.bad1[i][j] {
-                            ok = false;
-                            break;
-                        }
+                    if self.bad[i][j] {
+                        ok = false;
+                        break;
                     }
+                    let delta = self.deltas[i][j];
+                    if seen_solvers.contains(&self.solver_ids[i][j]) {
+                        ok = false;
+                        break;
+                    }
+                    cur += delta;
                 }
             }
-            if !ok {
-                continue;
-            }
-
-            let mut sum = 0;
-            let mut mask2 = 0;
-            let mut seen_solvers = BTreeSet::new();
-            for j in 0..self.moves2.len() {
-                let mut cur = 0;
-                let mut ok = true;
+            if cur < 0 && ok {
+                mask2 |= 1 << j;
+                sum += cur;
                 for i in 0..self.moves1.len() {
                     if mask1 & (1 << i) != 0 {
-                        if self.bad[i][j] {
-                            ok = false;
-                            break;
-                        }
-                        let delta = self.deltas[i][j];
-                        if seen_solvers.contains(&self.solver_ids[i][j]) {
-                            ok = false;
-                            break;
-                        }
-                        cur += delta;
-                    }
-                }
-                if cur < 0 && ok {
-                    mask2 |= 1 << j;
-                    sum += cur;
-                    for i in 0..self.moves1.len() {
-                        if mask1 & (1 << i) != 0 {
-                            seen_solvers.insert(self.solver_ids[i][j]);
-                        }
+                        seen_solvers.insert(self.solver_ids[i][j]);
                     }
                 }
             }
-            let cur = (sum, mask1, mask2);
+        }
+        EstimateChange {
+            delta: sum,
+            mask1,
+            mask2,
+            key: self.key.clone(),
+            side_mv: self.side_mv.clone(),
+        }
+    }
+
+    fn choose_best_move_rec(
+        &self,
+        mask1: MaskType,
+        bit: usize,
+        counter: &mut usize,
+    ) -> EstimateChange {
+        let mut best = self.choose_best_move_fixed_mask1(mask1);
+        if (best.mask1 != 0 && best.mask2 == 0) || bit == self.moves1.len() {
+            return best;
+        }
+
+        let mut ok = true;
+        for i in 0..bit {
+            if mask1 & (1 << i) != 0 && self.bad1[i][bit] {
+                ok = false;
+                break;
+            }
+        }
+        if ok {
+            *counter += 1;
+            let with_bit = self.choose_best_move_fixed_mask1(mask1 | (1 << bit));
+            if with_bit.delta <= best.delta {
+                let cur = self.choose_best_move_rec(mask1 | (1 << bit), bit + 1, counter);
+                if cur < best {
+                    best = cur;
+                }
+            }
+        }
+        {
+            *counter += 1;
+            let cur = self.choose_best_move_rec(mask1, bit + 1, counter);
             if cur < best {
                 best = cur;
             }
         }
+        best
+    }
 
-        EstimateChange {
-            delta: best.0,
-            mask1: best.1,
-            mask2: best.2,
-            key: self.key.clone(),
-            side_mv: self.side_mv.clone(),
-        }
+    fn choose_best_move(&self) -> EstimateChange {
+        let mut counter = 0;
+        let res = self.choose_best_move_rec(0, 0, &mut counter);
+        eprintln!("Rec calls: {counter}");
+        res
     }
 
     fn build_moves(&self, change: &EstimateChange) -> Vec<String> {
@@ -173,8 +197,8 @@ impl SameKeyTriangles {
         moves1.dedup();
         moves2.sort();
         moves2.dedup();
-        assert!(moves1.len() <= 64);
-        assert!(moves2.len() <= 64);
+        assert!(moves1.len() <= MaskType::BITS as usize);
+        assert!(moves2.len() <= MaskType::BITS as usize);
         let mut solver_ids = vec![vec![usize::MAX; moves2.len()]; moves1.len()];
         let mut deltas = vec![vec![i32::MAX; moves2.len()]; moves1.len()];
         let mut bad = vec![vec![false; moves2.len()]; moves1.len()];
@@ -309,6 +333,7 @@ pub fn solve_all_triangles(groups: &[Vec<Triangle>], sol: &mut TaskSolution, exa
         .map(|triangles| TriangleGroupSolver::new(triangles, &sol.state, &sol.target_state))
         .collect();
 
+    eprintln!("Start creating same_key triangle tables.");
     let mut triangles_by_key: HashMap<String, SameKeyTriangles> = triangles_by_key
         .into_par_iter()
         .map(|(key, triangles)| {

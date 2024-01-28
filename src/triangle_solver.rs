@@ -166,8 +166,6 @@ impl TriangleGroupSolver {
 
         res.triangles = triangles;
 
-        eprintln!("Triangles len: {}", res.triangles.len());
-
         for i in 0..res.positions.len() {
             let target_color = res.conv_color(target_colors[res.positions[i]]);
             res.d[i][target_color] = 0;
@@ -193,39 +191,6 @@ impl TriangleGroupSolver {
         }
 
         res.cur_answer_len = res.solve(start_colors, Solver::default()).len();
-        // {
-        //     eprintln!(
-        //         "Checking first moves. Cur answer len: {}",
-        //         res.cur_answer_len
-        //     );
-        //     let start_estimate = res.get_dist_estimate(start_colors);
-        //     eprintln!("Start estimate: {}", start_estimate);
-        //     let start_state = res.conv_state(start_colors);
-        //     for tr in res.triangles.iter() {
-        //         let mut new_state = start_state.clone();
-        //         tr.mv.permutation.apply(&mut new_state);
-        //         let estimate = res.score(&new_state);
-        //         if estimate >= start_estimate {
-        //             continue;
-        //         }
-        //         let new_len = res.bfs(&new_state, 5).len();
-        //         if new_len < res.cur_answer_len {
-        //             eprintln!(
-        //                 "Good first move! {} -> {}. Est: {estimate}",
-        //                 res.cur_answer_len, new_len
-        //             );
-        //         }
-        //     }
-        // }
-        // let bfs10 = res.solve(start_colors, Solver::Bfs(10)).len();
-        // let bfs50 = res.solve(start_colors, Solver::Bfs(50)).len();
-        // let bfs100 = res.solve(start_colors, Solver::Bfs(100)).len();
-        // let bfs1000 = res.solve(start_colors, Solver::Bfs(1000)).len();
-        // let estimate = res.get_dist_estimate(start_colors);
-        // eprintln!(
-        //     "BFS10: {}, BFS50: {}, BFS100: {}. A*: {}. BFS1000: {}. Esimate: {estimate}",
-        //     bfs10, bfs50, bfs100, res.cur_answer_len, bfs1000
-        // );
 
         res
     }
