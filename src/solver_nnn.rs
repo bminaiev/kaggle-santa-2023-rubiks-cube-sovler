@@ -499,6 +499,6 @@ pub fn solve_nnn(
         sol.print(data);
         show_ids(&sol.get_correct_colors_positions());
 
-        // log.append(sol);
+        log.append(sol);
     }
 }

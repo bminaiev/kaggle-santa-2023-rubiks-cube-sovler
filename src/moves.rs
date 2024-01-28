@@ -40,7 +40,7 @@ pub fn create_moves(puzzle_info: &PuzzleType, moves_descr: &[&str]) -> Vec<Sever
     res
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct SeveralMoves {
     pub name: Vec<String>,
     pub permutation: Permutation,
