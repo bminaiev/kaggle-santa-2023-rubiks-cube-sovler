@@ -160,7 +160,7 @@ fn try_solve_edges(
             answer.push(mv);
         }
     }
-    assert!(possible_to_make_centers_right(sol, &state).is_some());
+    // assert!(possible_to_make_centers_right(sol, &state).is_some());
     let puzzle_info = &sol.task.info;
 
     for (lvl, possible_moves) in possible_moves.iter().enumerate() {
@@ -299,9 +299,9 @@ pub fn solve_edges(sol: &mut TaskSolution) -> bool {
         return solve_edges_dwalton(sol);
     }
     let possible_moves = get_possible_moves(sol);
-    if sol.exact_perm {
-        assert!(possible_to_make_centers_right(sol, &sol.state).is_some());
-    }
+    // if sol.exact_perm {
+    //     assert!(possible_to_make_centers_right(sol, &sol.state).is_some());
+    // }
 
     let mut rng = StdRng::seed_from_u64(34534543);
 
@@ -314,10 +314,10 @@ pub fn solve_edges(sol: &mut TaskSolution) -> bool {
                 sol.append_move(mv);
             }
             // TODO: only do this if needed
-            let extra_moves = possible_to_make_centers_right(sol, &sol.state).unwrap();
-            for mv in extra_moves.iter() {
-                sol.append_move(mv);
-            }
+            // let extra_moves = possible_to_make_centers_right(sol, &sol.state).unwrap();
+            // for mv in extra_moves.iter() {
+            //     sol.append_move(mv);
+            // }
             eprintln!("EDGES SOLVED!");
             sol.show();
             return true;

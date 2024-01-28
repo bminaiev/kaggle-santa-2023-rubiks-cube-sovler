@@ -12,6 +12,7 @@ use crate::{
     cube_ab::cube_ab_solver,
     data::{load_data, Data},
     dwalton_experiment::solve_dwalton,
+    exact_perm33_solver::solve_exact33_perm,
     exact_perm_solver::solve_exact_perm,
     globe_jaapsch::solve_globe_jaapsch,
     moves::SeveralMoves,
@@ -38,6 +39,7 @@ pub mod dsu;
 pub mod dwalton_experiment;
 pub mod edge_solver;
 pub mod edge_solver_dwalton;
+pub mod exact_perm33_solver;
 pub mod exact_perm_solver;
 pub mod globe_jaapsch;
 pub mod greedy;
@@ -501,19 +503,26 @@ fn main() {
     let data = load_data();
 
     let mut log = SolutionsLog::new();
-    make_submission(&data, &log);
+    // make_submission(&data, &log);
 
     // analyze_puzzle_type(&data, "cube_3/3/3");
     // analyze_permuations(&data);
 
     // show_info(&data);
 
-    let exact_perm = true;
+    let exact_perm = false;
     let cube3_converter = Cube3Converter::new(Solver3::new(&data, exact_perm));
 
     // fix_permutations_in_log(&data, "cube_33/33/33", &mut log, &cube3_converter);
 
-    // solve_exact_perm(&data, "cube_6/6/6", &cube3_converter, &mut log);
+    // solve_exact33_perm(&data, "cube_33/33/33", &cube3_converter, &mut log);
+    solve_nnn(
+        &data,
+        "cube_19/19/19",
+        &cube3_converter,
+        exact_perm,
+        &mut log,
+    );
 
     // solve3(&data, "cube_3/3/3");
 

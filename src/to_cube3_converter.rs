@@ -51,7 +51,10 @@ impl Cube3Converter {
         let mut state = vec![usize::MAX; ids_groups.len()];
         for i in 0..state.len() {
             for &x in ids_groups[i].iter() {
-                let expected_group = task.state[x];
+                let mut expected_group = task.state[x];
+                if exact_perm {
+                    expected_group = group_id[expected_group];
+                }
                 assert!(state[i] == usize::MAX || state[i] == expected_group);
                 state[i] = expected_group;
             }
@@ -72,7 +75,7 @@ impl Cube3Converter {
             };
             let mut new_task = TaskSolution::new_fake(state, fake_task);
             if exact_perm {
-                for _it in 0..10 {
+                for _it in 0..50 {
                     eprintln!("TRY SOLVING... {_it}");
                     let mut task_copy = new_task.clone();
                     if self.cube3_solver.solve_task_with_rotations(&mut task_copy) {

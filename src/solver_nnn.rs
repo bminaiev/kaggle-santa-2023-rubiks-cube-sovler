@@ -346,14 +346,14 @@ pub fn solve_nnn(
     println!("Solving nnn: {task_type}");
 
     let mut solutions = TaskSolution::all_by_type(data, task_type, exact_perm);
-    let mut solutions: Vec<_> = solutions
-        .into_iter()
-        .filter(|t| t.task.get_color_type() == "B")
-        .collect();
+    // let mut solutions: Vec<_> = solutions
+    //     .into_iter()
+    //     .filter(|t| t.task.get_color_type() == "B")
+    //     .collect();
     // solutions.reverse();
     eprintln!("Tasks cnt: {}", solutions.len());
-    // solutions.swap(0, 1);
-    solutions.truncate(1);
+    solutions.swap(0, 3);
+    // solutions.truncate(1);
     let task_id = solutions[0].task_id;
     eprintln!("Solving id={task_id}");
 
@@ -451,7 +451,7 @@ pub fn solve_nnn(
         // eprintln!("State: {:?}", sol.state);
         if exact_perm {
             eprintln!("Solving parity...");
-            let need_moves = triangle_parity_solver(&sol.state, dsu.get_groups(), sol, sz);
+            let need_moves = triangle_parity_solver(&sol.state, dsu.get_groups(), sol, sz, false);
             for mv in need_moves.iter() {
                 // eprintln!("Need move: {:?}", mv.name);
                 puzzle_info.moves[mv].apply(&mut sol.state);
@@ -484,32 +484,6 @@ pub fn solve_nnn(
         solve_all_triangles(&triangle_groups, sol, exact_perm);
 
         eprintln!("Before solving edges...");
-
-        // eprintln!("DWALTON: {}", conv_cube_to_dwalton(sol));
-
-        // let tmp_moves = conv_dwalton_moves(9, "4Rw U2 4Rw U2 4Rw U2 4Rw U2 4Rw U2 4Uw2 R U D F 4Rw2 B L'  4Bw2 D  4Dw2 4Rw2 D2 B 4Rw2 4Dw2 F' U2 D2 4Rw2 4Uw2 B' 4Uw2 F B2 4Lw2 D B2 U 4Fw2 4Lw2 F2 4Bw2 D' R2 U' 4Fw2 L2 U 4Lw2 4Fw2 ");
-        // for mv in tmp_moves.iter() {
-        //     sol.append_move(mv);
-        // }
-        // sol.print(data);
-
-        // eprintln!("DWALTON2: {}", conv_cube_to_dwalton(sol));
-
-        // let tmp_moves = conv_dwalton_moves(9, "3Rw U2 3Rw U2 3Rw U2 3Rw U2 3Rw U2 D B 3Rw2 B D 3Lw2 F' R' B2 D R2 3Dw2 F' D2 B' 3Uw2 3Lw2 F' 3Rw2 F' R2 3Uw2 3Dw2 R2 D' 3Lw2 D' L2 3Rw2 U' 3Fw2 B2 3Rw2 3Bw2 L2 D 3Bw2");
-        // for mv in tmp_moves.iter() {
-        //     sol.append_move(mv);
-        // }
-        // sol.print(data);
-
-        // eprintln!("DWALTON3: {}", conv_cube_to_dwalton(sol));
-
-        // let tmp_moves = conv_dwalton_moves(9, "B' L' 2Rw2 D R' F' D F' 2Lw2 2Dw2 B' D2 F2 2Uw2 2Lw2 U2 2Uw2 F 2Dw2 D2 R2 U 2Rw2 D R2 2Bw2 D' 2Fw2 D2 R2 U 2Bw2 U 2Lw2 R2 2Bw2 ");
-        // for mv in tmp_moves.iter() {
-        //     sol.append_move(mv);
-        // }
-        // sol.print(data);
-
-        // eprintln!("DWALTON4: {}", conv_cube_to_dwalton(sol));
 
         show_ids(&sol.get_correct_colors_positions());
 

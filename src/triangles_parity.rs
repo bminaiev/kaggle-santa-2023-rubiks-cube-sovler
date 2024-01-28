@@ -5,11 +5,15 @@ pub fn triangle_parity_solver(
     groups: Vec<Vec<usize>>,
     sol: &TaskSolution,
     sz: usize,
+    only_side_moves: bool,
 ) -> Vec<String> {
     let mut moves = vec![];
     for dir in ["f", "r", "d"].iter() {
         for x in 0..sz {
             if x * 2 + 1 == sz {
+                continue;
+            }
+            if only_side_moves && (x != 0 && x != sz - 1) {
                 continue;
             }
             moves.push(format!("{dir}{x}"));

@@ -4,6 +4,7 @@ use crate::{
     moves::{rev_move, SeveralMoves},
     permutation::Permutation,
     puzzle_type::PuzzleType,
+    utils::perm_parity,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -219,6 +220,20 @@ impl TriangleGroupSolver {
 
     pub fn solve(&self, state: &[usize], solver: Solver) -> Vec<usize> {
         let perm = self.conv_state(state);
+        if self.colors.len() == 24 {
+            let mut expected_colors = vec![usize::MAX; self.colors.len()];
+            for i in 0..expected_colors.len() {
+                for c in 0..24 {
+                    if self.d[i][c] == 0 {
+                        expected_colors[i] = c;
+                    }
+                }
+            }
+            let my = perm.conv();
+            let parity1 = perm_parity(&my);
+            let parity2 = perm_parity(&expected_colors);
+            assert_eq!(parity1, parity2);
+        }
         // assert!(perm_parity(&perm) == 0);
         match solver {
             Solver::Astar => unimplemented!(),
