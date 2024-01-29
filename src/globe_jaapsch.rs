@@ -5,10 +5,7 @@ use rand::{
     seq::{IteratorRandom, SliceRandom},
     Rng, SeedableRng,
 };
-use rayon::{
-    iter::{IntoParallelRefMutIterator, ParallelIterator},
-    vec,
-};
+use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 use crate::{
     data::Data, puzzle_type::PuzzleType, sol_utils::TaskSolution, solutions_log::SolutionsLog,
@@ -41,11 +38,11 @@ impl GlobeState {
         }
     }
 
-    fn rc_to_index(&self, r: usize, c: usize) -> usize {
+    pub fn rc_to_index(&self, r: usize, c: usize) -> usize {
         r * self.n_cols + (c % self.n_cols)
     }
 
-    fn index_to_rc(&self, i: usize) -> (usize, usize) {
+    pub fn index_to_rc(&self, i: usize) -> (usize, usize) {
         (i / self.n_cols, i % self.n_cols)
     }
 

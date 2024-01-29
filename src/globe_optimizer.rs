@@ -21,7 +21,7 @@ struct SolutionLayer {
 }
 
 impl SolutionLayer {
-    fn from_moves(moves: &[Move], row1: usize) -> Option<Self> {
+    fn from_moves(moves: &[GlobeMove], row1: usize) -> Option<Self> {
         let mut steps = vec![];
         let mut up_delta = 0i32;
         let mut down_delta = 0i32;
@@ -29,7 +29,7 @@ impl SolutionLayer {
         while iter != moves.len() {
             let mv = &moves[iter];
             match *mv {
-                Move::Rotate(col) => {
+                GlobeMove::Rotate(col) => {
                     if up_delta.signum() == down_delta.signum() && up_delta != 0 {
                         eprintln!("WTF? {up_delta} {down_delta}");
                         unreachable!()
@@ -39,14 +39,14 @@ impl SolutionLayer {
                     loop {
                         iter += 1;
                         match moves[iter] {
-                            Move::Rotate(col2) => {
+                            GlobeMove::Rotate(col2) => {
                                 if col != col2 {
                                     eprintln!("BAD SOLUTION!");
                                     return None;
                                 }
                                 break;
                             }
-                            Move::RowShift { row, delta } => {
+                            GlobeMove::RowShift { row, delta } => {
                                 if row == row1 {
                                     inside_up_delta += delta;
                                 } else {
@@ -65,7 +65,7 @@ impl SolutionLayer {
                     up_delta = 0;
                     down_delta = 0;
                 }
-                Move::RowShift { row, delta } => {
+                GlobeMove::RowShift { row, delta } => {
                     if row == row1 {
                         up_delta += delta;
                     } else {
@@ -89,30 +89,50 @@ impl SolutionLayer {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum Move {
+pub enum GlobeMove {
     Rotate(i32),
     RowShift { row: usize, delta: i32 },
 }
 
-impl Move {
-    fn from_str(s: &str) -> Move {
+impl GlobeMove {
+    fn from_str(s: &str) -> GlobeMove {
         if let Some(col) = s.strip_prefix('f') {
-            Move::Rotate(col.parse().unwrap())
+            GlobeMove::Rotate(col.parse().unwrap())
         } else if let Some(col) = s.strip_prefix("-f") {
-            Move::Rotate(col.parse().unwrap())
+            GlobeMove::Rotate(col.parse().unwrap())
         } else if let Some(col) = s.strip_prefix('r') {
-            Move::RowShift {
+            GlobeMove::RowShift {
                 row: col.parse().unwrap(),
                 delta: -1,
             }
         } else if let Some(col) = s.strip_prefix("-r") {
-            Move::RowShift {
+            GlobeMove::RowShift {
                 row: col.parse().unwrap(),
                 delta: 1,
             }
         } else {
             eprintln!("Unknown move: {}", s);
             unreachable!()
+        }
+    }
+
+    pub fn renumerate_rows(&mut self, row1: usize, row2: usize) {
+        match self {
+            GlobeMove::Rotate(_) => {}
+            GlobeMove::RowShift { row, delta: _ } => *row = if *row == 0 { row1 } else { row2 },
+        }
+    }
+
+    pub fn to_strings(&self) -> Vec<String> {
+        match self {
+            GlobeMove::Rotate(col) => vec![format!("f{}", col)],
+            GlobeMove::RowShift { row, delta } => {
+                if *delta > 0 {
+                    vec![format!("-r{row}"); delta.abs() as usize]
+                } else {
+                    vec![format!("r{row}"); delta.abs() as usize]
+                }
+            }
         }
     }
 }
@@ -124,16 +144,16 @@ fn parse_existing_solution(moves: &[String], state: &GlobeState) -> Option<Vec<S
         let row2 = state.n_rows - 1 - row1;
         let mut related_moves = vec![];
         for mv in moves.iter() {
-            let mv = Move::from_str(mv);
+            let mv = GlobeMove::from_str(mv);
             match mv {
-                Move::Rotate(_col) => {
+                GlobeMove::Rotate(_col) => {
                     if related_moves.last() == Some(&mv) {
                         related_moves.pop();
                     } else {
                         related_moves.push(mv);
                     }
                 }
-                Move::RowShift { row, .. } => {
+                GlobeMove::RowShift { row, .. } => {
                     if row == row1 || row == row2 {
                         related_moves.push(mv);
                     }
@@ -172,7 +192,7 @@ struct Join {
     offset: i32,
 }
 
-fn combine_layers(layers: &[SolutionLayer], state: &GlobeState) -> Vec<Move> {
+fn combine_layers(layers: &[SolutionLayer], state: &GlobeState) -> Vec<GlobeMove> {
     let mut iters = vec![0; layers.len()];
     let lens: Vec<_> = layers.iter().map(|x| x.steps.len()).collect();
     eprintln!("Lens: {:?}", lens);
@@ -248,12 +268,12 @@ fn combine_layers(layers: &[SolutionLayer], state: &GlobeState) -> Vec<Move> {
                         if join.offset.signum() != change.up_delta.signum() && join.offset != 0 {
                             cur_delta[layer] += join.offset.signum();
                             join.offset -= join.offset.signum();
-                            res_moves.push(Move::RowShift {
+                            res_moves.push(GlobeMove::RowShift {
                                 row: row2,
                                 delta: -change.up_delta.signum(),
                             });
                         } else {
-                            res_moves.push(Move::RowShift {
+                            res_moves.push(GlobeMove::RowShift {
                                 row: row1,
                                 delta: change.up_delta.signum(),
                             });
@@ -263,19 +283,20 @@ fn combine_layers(layers: &[SolutionLayer], state: &GlobeState) -> Vec<Move> {
                         if join.offset.signum() != change.down_delta.signum() && join.offset != 0 {
                             cur_delta[layer] += join.offset.signum();
                             join.offset -= join.offset.signum();
-                            res_moves.push(Move::RowShift {
+                            res_moves.push(GlobeMove::RowShift {
                                 row: row1,
                                 delta: -change.down_delta.signum(),
                             });
                         } else {
-                            res_moves.push(Move::RowShift {
+                            res_moves.push(GlobeMove::RowShift {
                                 row: row2,
                                 delta: change.down_delta.signum(),
                             });
                         }
                     }
-                    let rotate =
-                        Move::Rotate(state.calc_col(change.rotate_pos.unwrap() + cur_delta[layer]));
+                    let rotate = GlobeMove::Rotate(
+                        state.calc_col(change.rotate_pos.unwrap() + cur_delta[layer]),
+                    );
                     if cur_idx == idx {
                         last_moves.push(change);
                     } else {
@@ -304,7 +325,7 @@ fn combine_layers(layers: &[SolutionLayer], state: &GlobeState) -> Vec<Move> {
                 let rot_pos2 =
                     state.calc_col(last_moves[1].rotate_pos.unwrap() + cur_delta[join[1].layer]);
                 assert_eq!(rot_pos1, rot_pos2);
-                res_moves.push(Move::Rotate(rot_pos1));
+                res_moves.push(GlobeMove::Rotate(rot_pos1));
                 for (lm, row) in last_moves.iter().zip([join[0].layer, join[1].layer].iter()) {
                     apply_row_moves(
                         &mut res_moves,
@@ -314,7 +335,7 @@ fn combine_layers(layers: &[SolutionLayer], state: &GlobeState) -> Vec<Move> {
                         state.n_rows - 1 - *row,
                     );
                 }
-                res_moves.push(Move::Rotate(rot_pos1));
+                res_moves.push(GlobeMove::Rotate(rot_pos1));
             }
             total_joined += 1;
         } else {
@@ -329,7 +350,7 @@ fn combine_layers(layers: &[SolutionLayer], state: &GlobeState) -> Vec<Move> {
                     apply_row_moves(&mut res_moves, step.up_delta, step.down_delta, row1, row2);
                     if let Some(pos) = step.rotate_pos {
                         let real_pos = state.calc_col(cur_delta[id] + pos);
-                        res_moves.push(Move::Rotate(real_pos));
+                        res_moves.push(GlobeMove::Rotate(real_pos));
                     }
                     apply_row_moves(
                         &mut res_moves,
@@ -340,7 +361,7 @@ fn combine_layers(layers: &[SolutionLayer], state: &GlobeState) -> Vec<Move> {
                     );
                     if let Some(pos) = step.rotate_pos {
                         let real_pos = state.calc_col(cur_delta[id] + pos);
-                        res_moves.push(Move::Rotate(real_pos));
+                        res_moves.push(GlobeMove::Rotate(real_pos));
                     }
                     iters[id] += 1;
                     found = true;
@@ -359,20 +380,20 @@ fn combine_layers(layers: &[SolutionLayer], state: &GlobeState) -> Vec<Move> {
 }
 
 fn apply_row_moves(
-    moves: &mut Vec<Move>,
+    moves: &mut Vec<GlobeMove>,
     up_delta: i32,
     down_delta: i32,
     row1: usize,
     row2: usize,
 ) {
     for _cnt in 0..up_delta.abs() {
-        moves.push(Move::RowShift {
+        moves.push(GlobeMove::RowShift {
             row: row1,
             delta: up_delta.signum(),
         });
     }
     for _cnt in 0..down_delta.abs() {
-        moves.push(Move::RowShift {
+        moves.push(GlobeMove::RowShift {
             row: row2,
             delta: down_delta.signum(),
         });
@@ -410,8 +431,8 @@ pub fn globe_optimize(data: &Data, task_types: &[&str], log: &mut SolutionsLog) 
         let combined_moves = combine_layers(&layers, &state);
         for mv in combined_moves.iter() {
             match *mv {
-                Move::Rotate(col) => state.move_rotate(sol, col as usize),
-                Move::RowShift { row, delta } => {
+                GlobeMove::Rotate(col) => state.move_rotate(sol, col as usize),
+                GlobeMove::RowShift { row, delta } => {
                     if delta == 1 {
                         state.move_row_right(sol, row, 1);
                     } else {

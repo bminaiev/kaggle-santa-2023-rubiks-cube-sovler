@@ -14,6 +14,7 @@ use crate::{
     dwalton_experiment::solve_dwalton,
     exact_perm33_solver::solve_exact33_perm,
     exact_perm_solver::solve_exact_perm,
+    globe_bfs::solve_globe_bfs,
     globe_jaapsch::solve_globe_jaapsch,
     globe_optimizer::globe_optimize,
     moves::SeveralMoves,
@@ -42,6 +43,7 @@ pub mod edge_solver;
 pub mod edge_solver_dwalton;
 pub mod exact_perm33_solver;
 pub mod exact_perm_solver;
+pub mod globe_bfs;
 pub mod globe_jaapsch;
 pub mod globe_optimizer;
 pub mod greedy;
@@ -478,8 +480,8 @@ fn analyze_permuations(data: &Data) {
 }
 
 fn show_globe(data: &Data) {
-    let n = 3;
-    let m = 4;
+    let n = 2;
+    let m = 6;
     let task_type = format!("globe_{n}/{m}");
     let puzzle_info = &data.puzzle_info[&task_type.to_string()];
     for (k, v) in puzzle_info.moves.iter() {
@@ -505,7 +507,7 @@ fn main() {
     let data = load_data();
 
     let mut log = SolutionsLog::new();
-    make_submission(&data, &log);
+    // make_submission(&data, &log);
 
     // analyze_puzzle_type(&data, "cube_3/3/3");
     // analyze_permuations(&data);
@@ -528,8 +530,10 @@ fn main() {
 
     // solve3(&data, "cube_3/3/3");
 
-    // show_globe(&data);
+    show_globe(&data);
     // globe_optimize(&data, &["globe_8/25"], &mut log);
+
+    // solve_globe_bfs(&data, &["globe_3/4"], &mut log);
 
     // solve_wreath(&data, &mut log);
 
