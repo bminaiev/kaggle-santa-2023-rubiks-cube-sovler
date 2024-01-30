@@ -8,8 +8,11 @@ use rand::{
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 use crate::{
-    data::Data, puzzle_type::PuzzleType, sol_utils::TaskSolution, solutions_log::SolutionsLog,
-    utils::calc_num_invs,
+    data::Data,
+    puzzle_type::PuzzleType,
+    sol_utils::TaskSolution,
+    solutions_log::SolutionsLog,
+    utils::{calc_num_invs, pick_random_perm},
 };
 
 pub struct GlobeState {
@@ -135,6 +138,22 @@ impl GlobeState {
     pub(crate) fn calc_col(&self, offset: i32) -> i32 {
         let sz = self.n_cols as i32;
         ((offset % sz) + sz) % sz
+    }
+
+    pub fn apply_matching_res(&self, sol: &mut TaskSolution, res: &MatchingResult, r1: usize) {
+        let r2 = self.n_rows - r1 - 1;
+        for mv in res.moves.iter() {
+            match mv {
+                &MyGlobeMove::Rotate(c) => {
+                    self.move_rotate(sol, c + 1);
+                    self.move_row_right(sol, r1, 1);
+                    self.move_rotate(sol, c + 1);
+                }
+                MyGlobeMove::BottomRowRight => {
+                    self.move_row_right(sol, r2, 1);
+                }
+            }
+        }
     }
 }
 
@@ -326,15 +345,9 @@ pub fn globe_final_rows_move(state: &GlobeState, sol: &mut TaskSolution) {
 }
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
-enum MyMove {
+pub enum MyGlobeMove {
     Rotate(usize),
     BottomRowRight,
-}
-
-fn pick_random_perm(n: usize, rng: &mut StdRng) -> Vec<usize> {
-    let mut a: Vec<_> = (0..n).collect();
-    a.shuffle(rng);
-    a
 }
 
 fn solve_two_rows(state: &GlobeState, sol: &mut TaskSolution, r1: usize, rng: &mut StdRng) {
@@ -370,39 +383,26 @@ fn solve_two_rows(state: &GlobeState, sol: &mut TaskSolution, r1: usize, rng: &m
 
     let res = find_best(rng, &init_colors, &row_by_color);
 
-    for mv in res.moves.iter() {
-        match mv {
-            &MyMove::Rotate(c) => {
-                state.move_rotate(sol, c + 1);
-                state.move_row_right(sol, r1, 1);
-                state.move_rotate(sol, c + 1);
-            }
-            MyMove::BottomRowRight => {
-                state.move_row_right(sol, r2, 1);
-            }
-        }
-    }
-
+    state.apply_matching_res(sol, &res, r1);
     // eprintln!("Real state:");
     // state.show_state(&sol.state, &sol.target_state);
 
     // eprintln!("Min invs: {}", res.tot_invs);
 }
 
-#[derive(Clone)]
-struct Stage {
-    in_row: Vec<Vec<usize>>,
+#[derive(Clone, Debug)]
+pub struct GlobeSaStage {
+    pub in_row: Vec<Vec<usize>>,
 }
 
 #[derive(Clone)]
-struct SolutionInfo {
-    stages: Vec<Stage>,
-    perms: Vec<Vec<usize>>,
-    row_by_color: Vec<usize>,
-    init_colors: Vec<usize>,
+pub struct GlobeSolutionInfo {
+    pub stages: Vec<GlobeSaStage>,
+    pub perms: Vec<Vec<usize>>,
+    pub init_colors: Vec<usize>,
 }
 
-impl SolutionInfo {
+impl GlobeSolutionInfo {
     pub fn eval(&self) -> MatchingResult {
         let sz = self.init_colors.len() / 2;
         let mut a0: Vec<_> = (0..sz).collect();
@@ -427,8 +427,8 @@ impl SolutionInfo {
                 let v = [&a0, &a1][row_id][col];
                 let color = self.init_colors[v];
                 real_colors.push(color);
-                let correct_row = self.row_by_color[color];
-                assert_eq!(correct_row, row_id);
+                // let correct_row = self.row_by_color[color];
+                // assert_eq!(correct_row, row_id);
             }
         }
 
@@ -438,6 +438,78 @@ impl SolutionInfo {
         MatchingResult {
             moves: all_moves,
             tot_invs,
+        }
+    }
+
+    pub fn run_sa(&mut self, rng: &mut StdRng) {
+        let mut prev_score = self.eval().tot_invs;
+        let start_invs = prev_score;
+        eprintln!("Start invs: {}", prev_score);
+
+        let mut best = (prev_score, self.clone());
+        // // TODO: change
+        const MAX_SEC: f64 = 1.0 * 1.0;
+        let temp_start = 10.0f64;
+        let temp_end = 0.2f64;
+        let start = Instant::now();
+        let log_every = 1.0f64.max(MAX_SEC / 10.0);
+        let mut last_reported = 0.0;
+        let mut iters = 0;
+        loop {
+            let elapsed_s = start.elapsed().as_secs_f64();
+            if elapsed_s > MAX_SEC {
+                break;
+            }
+            iters += 1;
+            if elapsed_s > last_reported + log_every {
+                last_reported = elapsed_s;
+                eprintln!(
+                    "Elapsed: {:.2} sec. Iters/s: {}, Start score: {}. Score: {}. Best: {}",
+                    elapsed_s,
+                    iters as f64 / elapsed_s,
+                    start_invs,
+                    prev_score,
+                    best.0
+                );
+            }
+            let elapsed_frac = elapsed_s / MAX_SEC;
+            let temp = temp_start * (temp_end / temp_start).powf(elapsed_frac);
+            let stage_id = rng.gen_range(0..self.stages.len());
+            let perm_size = self.perms[stage_id].len();
+            let pos1 = rng.gen_range(0..perm_size);
+            let pos2 = rng.gen_range(0..perm_size);
+            self.perms[stage_id].swap(pos1, pos2);
+            let new_score = self.eval().tot_invs;
+            if new_score < best.0 {
+                best = (new_score, self.clone());
+            }
+            if new_score < prev_score
+                || fastrand::f64() < ((prev_score as f64 - new_score as f64) / temp).exp()
+            {
+                // Using a new state!
+                prev_score = new_score;
+            } else {
+                // Rollback
+                self.perms[stage_id].swap(pos1, pos2);
+            }
+        }
+        eprintln!("After local opt: {start_invs} -> {prev_score}.",);
+        *self = best.1;
+    }
+
+    pub(crate) fn new(
+        stages: Vec<GlobeSaStage>,
+        init_colors: Vec<usize>,
+        rng: &mut StdRng,
+    ) -> Self {
+        let perms: Vec<_> = stages
+            .iter()
+            .map(|stage| pick_random_perm(stage.in_row[0].len(), rng))
+            .collect();
+        Self {
+            stages,
+            init_colors,
+            perms,
         }
     }
 }
@@ -459,8 +531,8 @@ fn find_best(rng: &mut StdRng, init_colors: &[usize], row_by_color: &[usize]) ->
                 in_row1[1 - correct_row].push(idx);
             }
         }
-        stages.push(Stage { in_row: in_row0 });
-        stages.push(Stage { in_row: in_row1 });
+        stages.push(GlobeSaStage { in_row: in_row0 });
+        stages.push(GlobeSaStage { in_row: in_row1 });
     }
     // {
     //     let mut in_row0 = vec![vec![]; 2];
@@ -487,74 +559,22 @@ fn find_best(rng: &mut StdRng, init_colors: &[usize], row_by_color: &[usize]) ->
         .map(|stage| pick_random_perm(stage.in_row[0].len(), rng))
         .collect();
 
-    let mut sol_info = SolutionInfo {
+    let mut sol_info = GlobeSolutionInfo {
         stages,
         perms,
-        row_by_color: row_by_color.to_vec(),
+        // row_by_color: row_by_color.to_vec(),
         init_colors: init_colors.to_vec(),
     };
-    let mut prev_score = sol_info.eval().tot_invs;
-    let start_invs = prev_score;
-    eprintln!("Start invs: {}", prev_score);
-
-    let mut best = (prev_score, sol_info.clone());
-    // // TODO: change
-    const MAX_SEC: f64 = 1.0 * 1800.0;
-    let temp_start = 10.0f64;
-    let temp_end = 0.2f64;
-    let start = Instant::now();
-    let log_every = 1.0f64.max(MAX_SEC / 10.0);
-    let mut last_reported = 0.0;
-    let mut iters = 0;
-    loop {
-        let elapsed_s = start.elapsed().as_secs_f64();
-        if elapsed_s > MAX_SEC {
-            break;
-        }
-        iters += 1;
-        if elapsed_s > last_reported + log_every {
-            last_reported = elapsed_s;
-            eprintln!(
-                "Elapsed: {:.2} sec. Iters/s: {}, Start score: {}. Score: {}. Best: {}",
-                elapsed_s,
-                iters as f64 / elapsed_s,
-                start_invs,
-                prev_score,
-                best.0
-            );
-        }
-        let elapsed_frac = elapsed_s / MAX_SEC;
-        let temp = temp_start * (temp_end / temp_start).powf(elapsed_frac);
-        let stage_id = rng.gen_range(0..sol_info.stages.len());
-        let perm_size = sol_info.perms[stage_id].len();
-        let pos1 = rng.gen_range(0..perm_size);
-        let pos2 = rng.gen_range(0..perm_size);
-        sol_info.perms[stage_id].swap(pos1, pos2);
-        let new_score = sol_info.eval().tot_invs;
-        if new_score < best.0 {
-            best = (new_score, sol_info.clone());
-        }
-        if new_score < prev_score
-            || fastrand::f64() < ((prev_score as f64 - new_score as f64) / temp).exp()
-        {
-            // Using a new state!
-            prev_score = new_score;
-        } else {
-            // Rollback
-            sol_info.perms[stage_id].swap(pos1, pos2);
-        }
-    }
-    eprintln!("After local opt: {start_invs} -> {prev_score}.",);
-
-    best.1.eval()
+    sol_info.run_sa(rng);
+    sol_info.eval()
 }
 
-struct MatchingResult {
-    moves: Vec<MyMove>,
-    tot_invs: usize,
+pub struct MatchingResult {
+    pub moves: Vec<MyGlobeMove>,
+    pub tot_invs: usize,
 }
 
-fn apply_matching(a0: &mut [usize], a1: &mut [usize], pairs: Vec<usize>) -> Vec<MyMove> {
+fn apply_matching(a0: &mut [usize], a1: &mut [usize], pairs: Vec<usize>) -> Vec<MyGlobeMove> {
     let sz = a0.len();
     let mut moves = vec![];
     let cnt_move = sz / 2 - 1;
@@ -566,7 +586,7 @@ fn apply_matching(a0: &mut [usize], a1: &mut [usize], pairs: Vec<usize>) -> Vec<
             let v1 = a0[c1];
             let v2 = a1[c2];
             if pairs[v1] == v2 {
-                moves.push(MyMove::Rotate(c1));
+                moves.push(MyGlobeMove::Rotate(c1));
                 // eprintln!("Switch {v1} and {v2}");
                 changed = true;
                 a0[c1] = v2;
@@ -583,7 +603,7 @@ fn apply_matching(a0: &mut [usize], a1: &mut [usize], pairs: Vec<usize>) -> Vec<
         }
         if !changed {
             a1.rotate_right(1);
-            moves.push(MyMove::BottomRowRight);
+            moves.push(MyGlobeMove::BottomRowRight);
         }
     }
     moves

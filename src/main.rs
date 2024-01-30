@@ -17,6 +17,7 @@ use crate::{
     globe_bfs::solve_globe_bfs,
     globe_jaapsch::solve_globe_jaapsch,
     globe_optimizer::globe_optimize,
+    globe_sim_annealing::solve_globe_sa,
     moves::SeveralMoves,
     permutation::Permutation,
     puzzle::Puzzle,
@@ -46,6 +47,7 @@ pub mod exact_perm_solver;
 pub mod globe_bfs;
 pub mod globe_jaapsch;
 pub mod globe_optimizer;
+pub mod globe_sim_annealing;
 pub mod greedy;
 pub mod groups;
 pub mod kociemba_solver;
@@ -530,10 +532,10 @@ fn main() {
 
     // solve3(&data, "cube_3/3/3");
 
-    show_globe(&data);
+    // show_globe(&data);
     // globe_optimize(&data, &["globe_8/25"], &mut log);
 
-    // solve_globe_bfs(&data, &["globe_3/4"], &mut log);
+    solve_globe_sa(&data, &["globe_1/8"], &mut log);
 
     // solve_wreath(&data, &mut log);
 

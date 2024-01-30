@@ -4,7 +4,7 @@ use std::{
     ops::{Range, RangeInclusive},
 };
 
-use rand::Rng;
+use rand::{rngs::StdRng, seq::SliceRandom, Rng};
 
 use crate::{
     cube_edges_calculator::build_squares,
@@ -309,4 +309,10 @@ fn dwalton_moves() {
 fn dwalton_moves4() {
     let res = conv_dwalton_moves(4, "Rw' B2 Rw2 U2 Rw' Dw2 R F2 Lw' L2 U Rw2 Uw2 D2 B Dw2 B2 L2 D' Lw2 U2 L2 D' L2 Lw2 D R2 Fw2 D' F L' B2 D' L2 F' U F R B2 R2 B2 U R2 F2 B2 U R2 B2");
     eprintln!("res={:?}", res);
+}
+
+pub fn pick_random_perm(n: usize, rng: &mut StdRng) -> Vec<usize> {
+    let mut a: Vec<_> = (0..n).collect();
+    a.shuffle(rng);
+    a
 }

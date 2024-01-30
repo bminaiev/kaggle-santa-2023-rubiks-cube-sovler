@@ -16,8 +16,6 @@ struct State<const C: usize> {
     colors: [[u8; C]; 2],
 }
 
-const LAYERS: usize = 13;
-
 impl<const C: usize> State<C> {
     fn set(&mut self, row: usize, col: usize, color: u8) {
         self.colors[row][col] = color;
@@ -56,14 +54,84 @@ impl<const C: usize> State<C> {
         }
     }
 
+    fn split_big(&self, big: &[u8], col: usize) -> Option<[u8; 4]> {
+        let mut res = [u8::MAX; 4];
+        for row in 0..2 {
+            for i in 0..2 {
+                let from = col + i * (C / 2);
+                let mut big_here = u8::MAX;
+                for j in from..from + C / 2 {
+                    let value = self.colors[row][j % C];
+                    if big.contains(&value) {
+                        big_here = value;
+                        break;
+                    }
+                }
+                res[row * 2 + i] = big_here;
+            }
+        }
+        if res.contains(&u8::MAX) {
+            None
+        } else {
+            Some(res)
+        }
+    }
+
     fn print(&self) {
         for i in 0..2 {
             for j in 0..C {
-                print!("{}", self.colors[i][j]);
+                print!("{} ", self.colors[i][j],);
             }
             println!();
         }
     }
+
+    fn num_splits(&self) -> usize {
+        let mut res = 0;
+        for row in 0..2 {
+            for col in 0..C {
+                let value1 = self.colors[row][col] as usize;
+                let value2 = self.colors[row][(col + 1) % C] as usize;
+                if value1 == 0 || value2 == 0 {
+                    continue;
+                }
+                let mut bad = value1 / C != value2 / C;
+                if (value1 + 1) % C != value2 % C {
+                    bad = true;
+                }
+                if bad {
+                    res += 1;
+                }
+            }
+        }
+        res
+    }
+
+    fn ok_rows(&self) -> bool {
+        for row in 0..2 {
+            for col in 0..C {
+                let value = self.colors[row][col] as usize;
+                if value / C != row {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+}
+
+fn interesting_row(a: &[u8], can_remove: u8) -> bool {
+    for pos in 0..a.len() {
+        let mut tmp = a.to_vec();
+        if can_remove != u8::MAX && tmp[pos] != can_remove {
+            continue;
+        }
+        tmp.remove(pos);
+        if tmp.windows(2).all(|a| a[0] < a[1]) {
+            return true;
+        }
+    }
+    false
 }
 
 struct PrevEdge<const C: usize> {
@@ -91,6 +159,8 @@ fn bfs<const C: usize>(
         },
     );
     let start = Instant::now();
+    let mut showed = 0;
+    let mut seen_0_pos = vec![false; C];
     for lvl in 0..queues.len() {
         let mut cur_lvl = vec![];
         mem::swap(&mut queues[lvl], &mut cur_lvl);
@@ -103,11 +173,30 @@ fn bfs<const C: usize>(
             );
         }
         for state in cur_lvl {
+            {
+                if state.ok_rows()
+                    && interesting_row(&state.colors[0], 0)
+                    && interesting_row(&state.colors[1], u8::MAX)
+                // && state.colors[0][4] == 0
+                {
+                    let index_of_0 = state.colors[0].iter().position(|&x| x == 0).unwrap();
+                    if seen_0_pos[index_of_0] {
+                        continue;
+                    }
+                    seen_0_pos[index_of_0] = true;
+                    showed += 1;
+                    eprintln!("Cur state: (splits = {})", state.num_splits());
+                    state.print();
+                }
+            }
             if rev_seen.contains_key(&state) {
                 eprintln!("Found solution!");
                 return (seen, Some(state));
             }
             if lvl == queues.len() - 1 {
+                continue;
+            }
+            if state.num_splits() > 4 {
                 continue;
             }
             for row in 0..2 {
@@ -167,6 +256,7 @@ fn bfs<const C: usize>(
             }
         }
     }
+    eprintln!("Showed: {}", showed);
     (seen, None)
 }
 
@@ -204,15 +294,23 @@ fn extract_path<const C: usize>(
 }
 
 #[derive(Default)]
-struct Recolor {
+pub struct Recolor {
     map: FxHashMap<usize, u8>,
 }
 
 impl Recolor {
-    pub fn get(&mut self, color: usize) -> u8 {
+    pub fn get_or_add(&mut self, color: usize) -> u8 {
         let sz = self.map.len();
         self.map.entry(color).or_insert_with(|| sz as u8);
         self.map[&color]
+    }
+
+    pub fn get(&self, color: usize) -> u8 {
+        self.map[&color]
+    }
+
+    pub(crate) fn num_colors(&self) -> usize {
+        self.map.len()
     }
 }
 
@@ -230,7 +328,7 @@ fn solve_row<const C: usize>(
     let mut final_state = State::<C>::new();
     for i in 0..2 {
         for j in 0..C {
-            let color = recolor.get(sol.target_state[state.rc_to_index([row, row2][i], j)]);
+            let color = recolor.get_or_add(sol.target_state[state.rc_to_index([row, row2][i], j)]);
             final_state.set(i, j, color);
         }
     }
@@ -309,7 +407,30 @@ impl<const C: usize> Precalcs<C> {
     }
 }
 
+const LAYERS: usize = 13;
+fn test() -> bool {
+    const C: usize = 16;
+    let mut state = State::<C>::new();
+    let mut start = [[0; C]; 2];
+    for i in 0..2 {
+        for j in 0..C {
+            start[i][j] = i * C + j;
+        }
+    }
+    for i in 0..2 {
+        for j in 0..C {
+            state.set(i, j, start[i][j].try_into().unwrap());
+        }
+    }
+    let (from_start, _) = bfs(state, 50, &FxHashMap::default());
+    eprintln!("Full size: {}", from_start.len());
+    true
+}
+
 pub fn solve_globe_bfs(data: &Data, task_types: &[&str], log: &mut SolutionsLog) {
+    if test() {
+        return;
+    }
     let mut solutions = TaskSolution::all_by_types(data, task_types);
     let mut solutions: Vec<_> = solutions
         .into_iter()
