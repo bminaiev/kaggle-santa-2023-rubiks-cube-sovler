@@ -34,12 +34,24 @@ fn solve_rows(state: &GlobeState, sol: &mut TaskSolution, row1: usize) {
         }
         a
     };
+
     let a = conv_state(sol);
 
     let num_colors = recolor.num_colors();
+    let calc_score = |a: &[Vec<usize>]| -> usize {
+        let mut res = 0;
+        for i in 0..2 {
+            let in_lis = calc_cycle_lis(&a[i], &|x| {
+                x >= i * (num_colors / 2) && x <= (i + 1) * (num_colors / 2)
+            });
+            res = res.max(in_lis.iter().filter(|&&x| !x).count());
+        }
+        res
+    };
 
     let show_rows = |a: &[Vec<usize>]| {
         let line = num_colors / 2;
+        eprintln!("Score: {}", calc_score(a));
         for i in 0..a.len() {
             let in_lis = calc_cycle_lis(&a[i], &|x| x >= i * line && x < (i + 1) * line);
             eprintln!(
@@ -109,16 +121,19 @@ fn solve_rows(state: &GlobeState, sol: &mut TaskSolution, row1: usize) {
 
     let mut sol_info = GlobeSolutionInfo::new(stages, init_colors, &mut rng);
 
-    sol_info.run_sa(&mut rng);
-    let matching_res = sol_info.eval();
+    sol_info.run_sa(&mut rng, &calc_score);
+    let matching_res = sol_info.eval(calc_score);
     state.apply_matching_res(sol, &matching_res, row1);
 
-    let mut a = conv_state(&sol);
+    let mut a = conv_state(sol);
 
     show_rows(&a);
 
-    for stage_it in 2..4 {
-        eprintln!("Stage {stage_it}!");
+    for stage_it in 2..5 {
+        eprintln!(
+            "Stage {stage_it}! Current solution len: {}",
+            sol.answer.len()
+        );
         let stage = build_stage(&a, &mut rng);
         eprintln!("New stage: {stage:?}");
         let stage_back = GlobeSaStage {
@@ -133,14 +148,15 @@ fn solve_rows(state: &GlobeState, sol: &mut TaskSolution, row1: usize) {
             }
         }
         let mut sol_info = GlobeSolutionInfo::new(stages, init_colors, &mut rng);
-        sol_info.run_sa(&mut rng);
-        let matching_res = sol_info.eval();
+        sol_info.run_sa(&mut rng, &calc_score);
+        let matching_res = sol_info.eval(calc_score);
         state.apply_matching_res(sol, &matching_res, row1);
 
-        a = conv_state(&sol);
+        a = conv_state(sol);
 
         show_rows(&a);
     }
+    eprintln!("Last solution len: {}", sol.answer.len());
 }
 
 fn calc_cycle_lis(a: &[usize], filter: &impl Fn(usize) -> bool) -> Vec<bool> {
@@ -166,7 +182,13 @@ fn calc_lis(a: &[usize], filter: &impl Fn(usize) -> bool) -> Vec<bool> {
             continue;
         }
         let pos = dp[..lis.len()]
-            .binary_search(&(a[i] + 1))
+            .binary_search_by(|&x| {
+                if x <= a[i] {
+                    std::cmp::Ordering::Less
+                } else {
+                    std::cmp::Ordering::Greater
+                }
+            })
             .unwrap_or_else(|x| x);
         dp[pos] = a[i];
         if pos == lis.len() {
@@ -207,6 +229,7 @@ pub fn solve_globe_sa(data: &Data, task_types: &[&str], log: &mut SolutionsLog) 
 
         for row in 0..state.n_rows / 2 {
             solve_rows(&state, sol, row);
+            unreachable!();
         }
 
         globe_final_rows_move(&state, sol);

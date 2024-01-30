@@ -535,7 +535,7 @@ fn main() {
     // show_globe(&data);
     // globe_optimize(&data, &["globe_8/25"], &mut log);
 
-    solve_globe_sa(&data, &["globe_1/8"], &mut log);
+    solve_globe_sa(&data, &["globe_1/16"], &mut log);
 
     // solve_wreath(&data, &mut log);
 

@@ -402,8 +402,12 @@ pub struct GlobeSolutionInfo {
     pub init_colors: Vec<usize>,
 }
 
+fn num_invs_scorer(a: &[Vec<usize>]) -> usize {
+    calc_num_invs_cycle(&a[0]).max(calc_num_invs_cycle(&a[1]))
+}
+
 impl GlobeSolutionInfo {
-    pub fn eval(&self) -> MatchingResult {
+    pub fn eval(&self, scorer: impl Fn(&[Vec<usize>]) -> usize) -> MatchingResult {
         let sz = self.init_colors.len() / 2;
         let mut a0: Vec<_> = (0..sz).collect();
         let mut a1: Vec<_> = (sz..2 * sz).collect();
@@ -423,32 +427,35 @@ impl GlobeSolutionInfo {
 
         let mut real_colors = vec![];
         for row_id in 0..2 {
+            let mut row = vec![];
             for col in 0..sz {
                 let v = [&a0, &a1][row_id][col];
                 let color = self.init_colors[v];
-                real_colors.push(color);
+                row.push(color);
                 // let correct_row = self.row_by_color[color];
                 // assert_eq!(correct_row, row_id);
             }
+            real_colors.push(row);
         }
 
-        let tot_invs =
-            calc_num_invs_cycle(&real_colors[..sz]).max(calc_num_invs_cycle(&real_colors[sz..]));
+        let tot_invs = scorer(&real_colors);
+        // let tot_invs =
+        //     calc_num_invs_cycle(&real_colors[..sz]).max(calc_num_invs_cycle(&real_colors[sz..]));
 
         MatchingResult {
             moves: all_moves,
-            tot_invs,
+            score: tot_invs,
         }
     }
 
-    pub fn run_sa(&mut self, rng: &mut StdRng) {
-        let mut prev_score = self.eval().tot_invs;
+    pub fn run_sa(&mut self, rng: &mut StdRng, scorer: &impl Fn(&[Vec<usize>]) -> usize) {
+        let mut prev_score = self.eval(scorer).score;
         let start_invs = prev_score;
         eprintln!("Start invs: {}", prev_score);
 
         let mut best = (prev_score, self.clone());
         // // TODO: change
-        const MAX_SEC: f64 = 1.0 * 1.0;
+        const MAX_SEC: f64 = 1.0 * 30.0;
         let temp_start = 10.0f64;
         let temp_end = 0.2f64;
         let start = Instant::now();
@@ -479,7 +486,7 @@ impl GlobeSolutionInfo {
             let pos1 = rng.gen_range(0..perm_size);
             let pos2 = rng.gen_range(0..perm_size);
             self.perms[stage_id].swap(pos1, pos2);
-            let new_score = self.eval().tot_invs;
+            let new_score = self.eval(scorer).score;
             if new_score < best.0 {
                 best = (new_score, self.clone());
             }
@@ -493,7 +500,7 @@ impl GlobeSolutionInfo {
                 self.perms[stage_id].swap(pos1, pos2);
             }
         }
-        eprintln!("After local opt: {start_invs} -> {prev_score}.",);
+        eprintln!("After local opt: {start_invs} -> {}.", best.0);
         *self = best.1;
     }
 
@@ -565,13 +572,13 @@ fn find_best(rng: &mut StdRng, init_colors: &[usize], row_by_color: &[usize]) ->
         // row_by_color: row_by_color.to_vec(),
         init_colors: init_colors.to_vec(),
     };
-    sol_info.run_sa(rng);
-    sol_info.eval()
+    sol_info.run_sa(rng, &num_invs_scorer);
+    sol_info.eval(num_invs_scorer)
 }
 
 pub struct MatchingResult {
     pub moves: Vec<MyGlobeMove>,
-    pub tot_invs: usize,
+    pub score: usize,
 }
 
 fn apply_matching(a0: &mut [usize], a1: &mut [usize], pairs: Vec<usize>) -> Vec<MyGlobeMove> {
