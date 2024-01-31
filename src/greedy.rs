@@ -170,9 +170,9 @@ pub fn greedy_cube_optimizer(sol: &mut TaskSolution) {
     eprintln!("Start score: {}", calc_score(&sol.state));
     let mut queues = vec![vec![]; 500];
     queues[0].push(sol.state.clone());
-    const MAX_CHECK: usize = 144;
+    const MAX_CHECK: usize = 444;
     const DEEP: usize = 6;
-    const TRIES: usize = 1000;
+    const TRIES: usize = 10000;
     let mut prev = HashMap::new();
     {
         let h = slice_hash(&sol.state);

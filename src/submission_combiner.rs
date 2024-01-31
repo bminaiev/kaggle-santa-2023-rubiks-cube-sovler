@@ -138,6 +138,30 @@ pub fn make_submission(data: &Data, log: &SolutionsLog) {
             tasks[id] = tasks_ab[id].clone();
         }
     }
+    let mut cur_sum_len: usize = calc_scores(&tasks);
+    const TARGET_SCORE: usize = 133_333;
+    for id in 0..tasks.len() {
+        if tasks[id].task.num_wildcards > 0 {
+            let mut task_tmp = tasks[id].clone();
+            task_tmp.reset(data);
+            for i in 0..tasks[id].answer.len() - 1 {
+                task_tmp.append_move(&tasks[id].answer[i]);
+                if task_tmp.is_solved_with_wildcards() {
+                    let delta = tasks[id].answer.len() - i - 1;
+                    if cur_sum_len - delta >= TARGET_SCORE {
+                        cur_sum_len -= delta;
+                        eprintln!(
+                            "WOW! CAN TRUNCATE TASK {id}: {} -> {}.",
+                            tasks[id].answer.len(),
+                            i + 1
+                        );
+                        tasks[id].answer.truncate(i + 1);
+                        break;
+                    }
+                }
+            }
+        }
+    }
     eprintln!("New sum scores: {}", calc_scores(&tasks));
     save_submission(&tasks);
 }

@@ -509,7 +509,7 @@ fn main() {
     let data = load_data();
 
     let mut log = SolutionsLog::new();
-    // make_submission(&data, &log);
+    make_submission(&data, &log);
 
     // analyze_puzzle_type(&data, "cube_3/3/3");
     // analyze_permuations(&data);
@@ -521,21 +521,15 @@ fn main() {
 
     // fix_permutations_in_log(&data, "cube_33/33/33", &mut log, &cube3_converter);
 
-    // solve_exact33_perm(&data, "cube_33/33/33", &cube3_converter, &mut log);
-    // solve_nnn(
-    //     &data,
-    //     "cube_33/33/33",
-    //     &cube3_converter,
-    //     exact_perm,
-    //     &mut log,
-    // );
+    // solve_exact_perm(&data, "cube_5/5/5", &cube3_converter, &mut log);
+    // solve_nnn(&data, "cube_9/9/9", &cube3_converter, exact_perm, &mut log);
 
     // solve3(&data, "cube_3/3/3");
 
     // show_globe(&data);
     // globe_optimize(&data, &["globe_8/25"], &mut log);
 
-    solve_globe_sa(&data, &["globe_1/16"], &mut log);
+    // solve_globe_jaapsch(&data, &["globe_1/16"], &mut log);
 
     // solve_wreath(&data, &mut log);
 

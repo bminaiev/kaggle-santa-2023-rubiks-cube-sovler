@@ -111,7 +111,7 @@ pub enum Solver {
 
 impl Default for Solver {
     fn default() -> Self {
-        Solver::Bfs(20)
+        Solver::Bfs(100)
     }
 }
 

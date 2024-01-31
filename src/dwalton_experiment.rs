@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    cube_edges_calculator::build_squares,
+    cube_edges_calculator::{build_squares, calc_cube_edges, calc_edges_score},
     data::Data,
     sol_utils::TaskSolution,
     solutions_log::SolutionsLog,
@@ -82,11 +82,11 @@ pub fn solve_dwalton(
     let mut solutions = TaskSolution::all_by_type(data, task_type, exact_perm);
     let mut solutions: Vec<_> = solutions
         .into_iter()
-        .filter(|t| t.task.get_color_type() == "A")
+        .filter(|t| t.task_id >= 235 && t.task_id <= 239)
         .collect();
     // solutions.reverse();
     eprintln!("Tasks cnt: {}", solutions.len());
-    solutions.truncate(1);
+    // solutions.truncate(1);
     let task_id = solutions[0].task_id;
     eprintln!("Solving id={task_id}");
 
@@ -106,6 +106,8 @@ pub fn solve_dwalton(
         show_cube_ids(a, sz);
     };
 
+    let edges = calc_cube_edges(&squares);
+
     for sol in solutions.iter_mut() {
         if sol.task_id == 283 {
             eprintln!("Skipping 283. Exact_perm: {}", sol.exact_perm);
@@ -114,55 +116,39 @@ pub fn solve_dwalton(
         eprintln!("DWALTON: {}", conv_cube_to_dwalton(sol));
 
         let mut prev_lines = usize::MAX;
-        loop {
-            sol.print(data);
-            show_ids(&sol.get_correct_colors_positions());
+        sol.print(data);
+        show_ids(&sol.get_correct_colors_positions());
 
-            let lines = run_dwalton_solver(sol).unwrap();
-            if lines.is_empty() {
+        let lines = run_dwalton_solver(sol).unwrap();
+        if lines.is_empty() {
+            break;
+        }
+        if lines.len() >= prev_lines {
+            eprintln!("WTF? Strategy failed! First comment: {}", lines[0].comment);
+            unreachable!();
+        }
+        for line in lines.iter() {
+            eprintln!("Comment: {}", line.comment);
+            eprintln!("Moves: {:?}", line.moves);
+
+            for mv in line.moves.iter() {
+                match mv {
+                    DwaltonMove::Simple(mv) => {
+                        sol.append_move(mv);
+                    }
+                    DwaltonMove::Wide(prefix, r) => {
+                        for x in r.clone() {
+                            sol.append_move(&format!("{prefix}{}", x));
+                        }
+                    }
+                }
+            }
+            let new_edge_scores = calc_edges_score(&edges, &sol.state, &sol.target_state);
+            let edges_ok =
+                (0..new_edge_scores.len()).all(|lvl| new_edge_scores[lvl] == edges[lvl].len());
+            if edges_ok {
+                // hope centers are ok as well
                 break;
-            }
-            if lines.len() >= prev_lines {
-                eprintln!("WTF? Strategy failed! First comment: {}", lines[0].comment);
-                unreachable!();
-            }
-            prev_lines = lines.len();
-            {
-                let line = &lines[0];
-                eprintln!("Comment: {}", line.comment);
-                eprintln!("Moves: {:?}", line.moves);
-                let mut important_indexes = HashSet::new();
-                important_indexes.insert(0);
-                important_indexes.insert(sz - 1);
-                for mv in line.moves.iter() {
-                    let idx = mv.get_index();
-                    important_indexes.insert(idx);
-                    important_indexes.insert(sz - 1 - idx);
-                }
-                if line.comment.contains("vertical_bars") {
-                    for i in 0..sz {
-                        important_indexes.insert(i);
-                    }
-                }
-                for mv in line.moves.iter() {
-                    match mv {
-                        DwaltonMove::Simple(mv) => {
-                            sol.append_move(mv);
-                        }
-                        DwaltonMove::Wide(prefix, r) => {
-                            // if sz % 2 == 0 {
-                            for x in r.clone() {
-                                if important_indexes.contains(&x) {
-                                    sol.append_move(&format!("{prefix}{}", x));
-                                }
-                            }
-                            // } else {
-                            //     sol.append_move(&format!("{prefix}{}", r.start()));
-                            //     sol.append_move(&format!("{prefix}{}", r.end()));
-                            // }
-                        }
-                    }
-                }
             }
         }
 
@@ -170,6 +156,6 @@ pub fn solve_dwalton(
         sol.print(data);
         show_ids(&sol.get_correct_colors_positions());
 
-        // log.append(sol);
+        log.append(sol);
     }
 }

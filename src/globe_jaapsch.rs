@@ -455,7 +455,7 @@ impl GlobeSolutionInfo {
 
         let mut best = (prev_score, self.clone());
         // // TODO: change
-        const MAX_SEC: f64 = 1.0 * 30.0;
+        const MAX_SEC: f64 = 15.0 * 60.0;
         let temp_start = 10.0f64;
         let temp_end = 0.2f64;
         let start = Instant::now();
